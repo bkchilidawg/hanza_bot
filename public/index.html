@@ -7,16 +7,14 @@
   <style>
     :root{
       --brand1:#9f9481; --brand2:#9f9481; --user1:#859f81; --user2:#859f81;
-      --bg:#314631;      /* chat panel background (very light mint) */
+      --bg:#adc0af;       /* lighter single green behind chat */
       --white:#fff; --border:#e2e8f0; --ink:#222; --muted:#666;
       --code-bg:#f6f6f6; --code-bd:#eee; --toast-bg:#111; --toast-fg:#fff;
     }
     *{box-sizing:border-box}
     body{
-      margin:0;
-      font-family:'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      color:var(--ink);
-      background:#ecf0ca; /* single light green page background */
+      margin:0; font-family:'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--ink);
+      background: #838373; /* single light green page background */
       display:flex; justify-content:center; align-items:center; height:100vh;
     }
     .chat-container{
@@ -36,8 +34,12 @@
 
     /* Brand block: avatar above name */
     .brand{
-      display:flex; flex-direction:column; align-items:center; justify-content:center;
-      gap:6px; min-width:100px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      min-width:100px; /* prevents toolbar crowding */
     }
     .avatar{
       width:72px; height:72px; border-radius:50%;
@@ -64,8 +66,8 @@
       border:1.5px solid rgba(255,255,255,.6); color:white; background:transparent;
       padding:8px 12px; border-radius:12px; cursor:pointer; font-weight:600; font-size:13px;
     }
-    .btn:hover{background:rgba(236, 162, 162, 0.932)}
-    .btn.stop{border-color:#ffb3b3; color:#fff; background:rgba(255, 0, 179, 0.15)}
+    .btn:hover{background:rgba(236,162,162,0.9)}
+    .btn.stop{border-color:#ffb3b3; color:#fff; background:rgba(255,0,179,0.15)}
     .btn.stop[disabled]{opacity:.5; cursor:not-allowed}
 
     .chat-messages{flex:1; padding:24px; overflow-y:auto; background:var(--bg);}
@@ -77,11 +79,13 @@
       border:1px solid transparent; white-space:normal; word-wrap:break-word;
     }
     .message.user .message-content{
-      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%);
-      color:white; box-shadow: 0 2px 10px rgba(0,0,0,.06); border: 1px solid rgba(0,0,0,.05);
+      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%); color:white;
+      box-shadow: 0 2px 10px rgba(0,0,0,.06);
+      border: 1px solid rgba(0,0,0,.05);
     }
     .message.bot .message-content{background:var(--white); border-color:var(--border);}
 
+    /* Copy bubble button */
     .copy{
       position:absolute; top:8px; right:8px; border:none; background:#f3f3ee; color:#333;
       padding:4px 8px; border-radius:10px; font-size:12px; cursor:pointer;
@@ -124,6 +128,20 @@
     }
     .message.bot .message-content pre .code-copy:hover{background:#f6f6f6}
 
+    /* Typing dots animation */
+    .typing-wrap{display:inline-flex; align-items:center; gap:8px; color:#64748b;}
+    .dots{display:inline-flex; gap:4px;}
+    .dot{
+      width:6px; height:6px; background:#9aa; border-radius:50%;
+      animation: jump 1s infinite ease-in-out;
+    }
+    .dot:nth-child(2){ animation-delay: .15s; }
+    .dot:nth-child(3){ animation-delay: .3s; }
+    @keyframes jump{
+      0%,80%,100%{ transform:translateY(0); opacity:.35; }
+      40%{ transform:translateY(-4px); opacity:1; }
+    }
+
     /* Toast */
     .toast{
       position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
@@ -132,7 +150,7 @@
     }
     .toast.show{opacity:.95}
 
-    /* Mobile */
+    /* Mobile: stack toolbar */
     @media (max-width:700px){
       .chat-header{ flex-direction:column; align-items:stretch; gap:10px; }
       .toolbar{ justify-content:center; }
@@ -176,8 +194,8 @@
             <option value="ultra">Ultra (2000w+)</option>
           </select>
         </div>
-        <!-- Stream toggle removed; streaming is always on -->
         <button class="btn" id="newBtn"  title="Start a new chat">New Chat</button>
+        <button class="btn" id="saveBtn" title="Save transcript to server">Save</button>
         <button class="btn" id="exportBtn" title="Export chat as .md">Export .md</button>
         <button class="btn stop" id="stopBtn" title="Stop streaming" disabled>Stop</button>
       </div>
@@ -206,6 +224,7 @@
     const messageInput = document.getElementById('messageInput');
     const sendButton   = document.getElementById('sendButton');
     const exportBtn    = document.getElementById('exportBtn');
+    const saveBtn      = document.getElementById('saveBtn');
     const newBtn       = document.getElementById('newBtn');
     const stopBtn      = document.getElementById('stopBtn');
     const toneSel      = document.getElementById('tone');
@@ -235,7 +254,7 @@
     const saved = localStorage.getItem(CHAT_KEY);
     if (saved) chatMessages.innerHTML = saved;
 
-    // Restore settings (no 'stream' anymore)
+    // Restore settings
     const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
     toneSel.value   = savedSettings.tone   || 'balanced';
     lengthSel.value = savedSettings.length || 'concise';
@@ -340,18 +359,7 @@
       return bubble; // for streaming
     }
 
-    // Typing indicator (we immediately switch to a real bubble for streaming)
-    function showTyping(){
-      const t = document.createElement('div');
-      t.className = 'message bot typing';
-      t.innerHTML = `<div class="message-content">Hanza is typing…</div>`;
-      chatMessages.appendChild(t);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      return t;
-    }
-    function removeTyping(){ const t = document.querySelector('.message.typing'); if (t) t.remove(); saveChat(); }
-
-    // Streaming via SSE + Stop support (always on)
+    // Streaming via SSE + Stop support + Typing dots
     let currentES = null;
     async function streamBotResponse(userMessage, opts, targetBubble){
       return new Promise((resolve)=>{
@@ -360,10 +368,18 @@
         currentES = es;
         stopBtn.disabled = false;
 
+        // show typing dots inside the target bubble until first tokens arrive
         let buffer = '';
         let raf = false;
+        targetBubble.innerHTML = `
+          <div class="typing-wrap">
+            <span>Hanza is typing</span>
+            <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+          </div>
+        `;
 
         const flush = ()=>{
+          if (!buffer) return; // keep dots until we have something
           targetBubble.innerHTML = renderMarkdown(buffer);
           decorateCodeCopies(targetBubble);
           chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -383,7 +399,7 @@
         es.onerror = ()=>{
           es.close(); currentES = null; stopBtn.disabled = true;
           if (!buffer){
-            targetBubble.textContent = "⚠️ Streaming failed. Try again.";
+            targetBubble.innerHTML = "⚠️ Streaming failed. Try again.";
             saveChat();
           }
           resolve();
@@ -404,8 +420,7 @@
       messageInput.value=''; messageInput.style.height='auto';
       sendButton.disabled = true;
 
-      showTyping();
-      removeTyping(); // create the bot bubble immediately for streaming
+      // create the bot bubble immediately (we fill typing dots + stream into it)
       const botBubble = addMessage('', false, true);
 
       const opts = currentOptions();
@@ -419,7 +434,7 @@
       if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
     });
 
-    // Export chat as Markdown
+    // Export chat as Markdown (client-side download)
     exportBtn.addEventListener('click', ()=>{
       const parts = Array.from(document.querySelectorAll('.message')).map(m=>{
         const isUser = m.classList.contains('user');
@@ -431,6 +446,29 @@
       const a = document.createElement('a'); a.href = url; a.download = 'hanza_session.md'; a.click();
       URL.revokeObjectURL(url);
       showToast('Exported as Markdown');
+    });
+
+    // Save transcript to server
+    function collectTranscript(){
+      return Array.from(document.querySelectorAll('.message')).map(m=>{
+        const role = m.classList.contains('user') ? 'user' : 'assistant';
+        const text = m.querySelector('.message-content').innerText.replace(/\s*Tip:.*$/,'').trim();
+        return { role, text };
+      });
+    }
+    saveBtn.addEventListener('click', async ()=>{
+      try{
+        const transcript = collectTranscript();
+        const title = transcript.find(t=>t.role==='user')?.text?.slice(0,60) || 'hanza_session';
+        const r = await fetch('/api/save',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ transcript, format:'md', title })
+        });
+        const data = await r.json();
+        if (data?.ok) showToast(`Saved: ${data.file}`);
+        else showToast('Save failed');
+      }catch{ showToast('Save failed'); }
     });
 
     // New Chat
