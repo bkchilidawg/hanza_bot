@@ -6,15 +6,21 @@
   <title>Hanza Bot - Blog Writing Assistant</title>
   <style>
     :root{
-      --brand1:#9f9481; --brand2:#9f9481; --user1:#859f81; --user2:#859f81;
-      --bg:#adc0af;       /* lighter single green behind chat */
-      --white:#fff; --border:#e2e8f0; --ink:#222; --muted:#666;
+      --brand1:#9f9481; --brand2:#9f9481;
+      --user1:#c2e6f1; --user2:#c2e6f1;
+      --bg:#adc0af;                 /* lighter green behind chat area */
+      --page:#838373;               /* single-page background color */
+      --white:#9f9481; --border:#e2e8f0; --ink:#222; --muted:#666;
       --code-bg:#f6f6f6; --code-bd:#eee; --toast-bg:#111; --toast-fg:#fff;
+      --drawer:#f6faf7;             /* history drawer background */
+      /* NEW: bot bubble light pink */
+      --botPink:#ebd7e0;
+      --botPinkBorder:#ffd6e7;
     }
     *{box-sizing:border-box}
     body{
       margin:0; font-family:'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--ink);
-      background: #838373; /* single light green page background */
+      background: var(--page);
       display:flex; justify-content:center; align-items:center; height:100vh;
     }
     .chat-container{
@@ -34,32 +40,20 @@
 
     /* Brand block: avatar above name */
     .brand{
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      gap:6px;
-      min-width:100px; /* prevents toolbar crowding */
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+      min-width:100px;
     }
-    .avatar{
-      width:72px; height:72px; border-radius:50%;
-      object-fit:cover; object-position:center;
-      border:2px solid rgba(255,255,255,.7);
-      box-shadow: 0 2px 8px rgba(0,0,0,.15);
-      background:#ddd;
-    }
+    .avatar{ width:72px; height:72px; border-radius:50%; object-fit:cover; object-position:center;
+      border:2px solid rgba(255,255,255,.7); box-shadow: 0 2px 8px rgba(0,0,0,.15); background:#ddd; }
     .brand-name{ font-size:16px; font-weight:700; letter-spacing:.2px; }
 
     .toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    .control{
-      display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.12);
-      padding:6px 10px; border-radius:10px; font-size:13px; backdrop-filter: blur(4px);
-    }
+    .control{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.12);
+      padding:6px 10px; border-radius:10px; font-size:13px; backdrop-filter: blur(4px); }
     .control label{opacity:.9}
     .control select{
       background:transparent; color:#fff; border:1px solid rgba(255,255,255,.5);
-      padding:4px 6px; border-radius:8px; font-weight:600; font-size:12px;
-      appearance:none; outline:none;
+      padding:4px 6px; border-radius:8px; font-weight:600; font-size:12px; appearance:none; outline:none;
     }
     .control option{color:#000}
     .btn{
@@ -74,22 +68,23 @@
     .message{margin-bottom:20px; display:flex;}
     .message.user{justify-content:flex-end;}
     .message-content{
-      position:relative;
-      max-width:75%; padding:12px 16px; border-radius:18px; font-size:15px; line-height:1.55;
+      position:relative; max-width:75%; padding:12px 16px; border-radius:18px; font-size:15px; line-height:1.55;
       border:1px solid transparent; white-space:normal; word-wrap:break-word;
     }
     .message.user .message-content{
-      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%); color:white;
-      box-shadow: 0 2px 10px rgba(0,0,0,.06);
-      border: 1px solid rgba(0,0,0,.05);
+      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%);
+      /* color will be overridden to black below */
+      box-shadow: 0 2px 10px rgba(0,0,0,.06); border: 1px solid rgba(0,0,0,.05);
     }
-    .message.bot .message-content{background:var(--white); border-color:var(--border);}
+    /* CHANGED: bot bubble → very light pink */
+    .message.bot .message-content{
+      background:var(--botPink);
+      border-color:var(--botPinkBorder);
+      /* color will be overridden to black below */
+    }
 
-    /* Copy bubble button */
-    .copy{
-      position:absolute; top:8px; right:8px; border:none; background:#f3f3ee; color:#333;
-      padding:4px 8px; border-radius:10px; font-size:12px; cursor:pointer;
-    }
+    .copy{ position:absolute; top:8px; right:8px; border:none; background:#f3eef2; color:#333;
+      padding:4px 8px; border-radius:10px; font-size:12px; cursor:pointer; }
     .copy:hover{background:#e9e7e2}
 
     .chat-input-container{
@@ -100,10 +95,8 @@
       flex:1; padding:14px 20px; border:2px solid var(--border); border-radius:24px;
       font-size:15px; resize:none; outline:none; max-height:160px; min-height:44px; line-height:1.4;
     }
-    .send-button{
-      background:#f3f3ee; border:2px solid var(--border); border-radius:24px;
-      padding:14px 20px; font-weight:700; cursor:pointer; min-width:110px;
-    }
+    .send-button{ background:#f3f3ee; border:2px solid var(--border); border-radius:24px;
+      padding:14px 20px; font-weight:700; cursor:pointer; min-width:110px; }
     .send-button[disabled]{opacity:.6; cursor:not-allowed}
     .note{margin-top:4px; font-size:12px; color:var(--muted);}
 
@@ -131,16 +124,9 @@
     /* Typing dots animation */
     .typing-wrap{display:inline-flex; align-items:center; gap:8px; color:#64748b;}
     .dots{display:inline-flex; gap:4px;}
-    .dot{
-      width:6px; height:6px; background:#9aa; border-radius:50%;
-      animation: jump 1s infinite ease-in-out;
-    }
-    .dot:nth-child(2){ animation-delay: .15s; }
-    .dot:nth-child(3){ animation-delay: .3s; }
-    @keyframes jump{
-      0%,80%,100%{ transform:translateY(0); opacity:.35; }
-      40%{ transform:translateY(-4px); opacity:1; }
-    }
+    .dot{ width:6px; height:6px; background:#9aa; border-radius:50%; animation: jump 1s infinite ease-in-out; }
+    .dot:nth-child(2){ animation-delay: .15s; } .dot:nth-child(3){ animation-delay: .3s; }
+    @keyframes jump{ 0%,80%,100%{ transform:translateY(0); opacity:.35; } 40%{ transform:translateY(-4px); opacity:1; } }
 
     /* Toast */
     .toast{
@@ -149,6 +135,63 @@
       font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s ease;
     }
     .toast.show{opacity:.95}
+
+    /* History drawer */
+    .drawer{
+      position:fixed; top:0; right:0; width:430px; max-width:95vw; height:100vh;
+      background:var(--drawer); border-left:1px solid #dfe7e2; box-shadow: -12px 0 30px rgba(0,0,0,.15);
+      transform: translateX(100%); transition: transform .25s ease; z-index:50;
+      display:flex; flex-direction:column;
+    }
+    .drawer.open{ transform: translateX(0); }
+    .drawer header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e5eee8; }
+    .drawer h3{ margin:0; font-size:18px; }
+    .drawer .list{ flex:1; overflow:auto; padding:10px 12px; }
+    .file{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid #e5eee8;
+      border-radius:10px; background:#fff; margin-bottom:10px; }
+    .file .meta { font-size:13px; color:#334; }
+    .file .actions button{ margin-left:8px; border:1px solid #ddd; background:#f8faf9; padding:6px 8px; border-radius:8px; cursor:pointer; }
+    .file .actions button:hover{ background:#eef5f1; }
+
+    /* Save-name modal */
+    .modal-backdrop{
+      position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:60;
+    }
+    .modal{
+      width:min(520px, 92vw); background:#fff; border-radius:16px; padding:18px; box-shadow:0 20px 50px rgba(0,0,0,.25);
+      border:1px solid #e5e7eb;
+    }
+    .modal h3{margin:0 0 8px 0; font-size:18px}
+    .modal p{margin:0 0 12px 0; color:#555; font-size:14px}
+    .modal-row{display:flex; gap:8px; align-items:center; margin-top:8px}
+    .modal input[type="text"]{
+      flex:1; padding:10px 12px; border:1.8px solid #e5e7eb; border-radius:10px; font-size:14px; outline:none;
+    }
+    .modal input[type="text"]:focus{border-color:#cbd5e1; box-shadow:0 0 0 3px rgba(148,163,184,.25)}
+    .modal .small{font-size:12px; color:#777; margin-top:6px}
+    .modal .actions{display:flex; gap:8px; justify-content:flex-end; margin-top:14px}
+    .modal .actions button{
+      padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb; cursor:pointer; background:#fff; font-weight:600;
+    }
+    .modal .actions .primary{ background:#1f2937; color:#fff; border-color:#1f2937; }
+    .modal .actions .primary:hover{ filter:brightness(1.1); }
+    .modal .actions .ghost:hover{ background:#f3f4f6; }
+
+    /* -------------------- Chat text to black (header unchanged) -------------------- */
+    .chat-messages { color: #000; }
+    .message.bot .message-content,
+    .message.user .message-content { color: #000; }
+
+    .message.bot .message-content h1,
+    .message.bot .message-content h2,
+    .message.bot .message-content h3,
+    .message.bot .message-content p,
+    .message.bot .message-content li,
+    .message.bot .message-content code { color:#000; }
+
+    .chat-input { color:#000; }
+    .chat-input::placeholder { color:#444; }
+    /* ----------------------------------------------------------------------------- */
 
     /* Mobile: stack toolbar */
     @media (max-width:700px){
@@ -194,9 +237,9 @@
             <option value="ultra">Ultra (2000w+)</option>
           </select>
         </div>
-        <button class="btn" id="newBtn"  title="Start a new chat">New Chat</button>
-        <button class="btn" id="saveBtn" title="Save transcript to server">Save</button>
-        <button class="btn" id="exportBtn" title="Export chat as .md">Export .md</button>
+        <button class="btn" id="newBtn">New Chat</button>
+        <button class="btn" id="saveBtn" title="Save transcript as PDF on server">Save PDF</button>
+        <button class="btn" id="historyBtn" title="Show saved conversations">History</button>
         <button class="btn stop" id="stopBtn" title="Stop streaming" disabled>Stop</button>
       </div>
     </div>
@@ -217,14 +260,44 @@
     </div>
   </div>
 
+  <!-- History Drawer -->
+  <aside class="drawer" id="historyDrawer" aria-hidden="true">
+    <header>
+      <h3>Saved Conversations</h3>
+      <div>
+        <button id="refreshHistory">Refresh</button>
+        <button id="closeHistory">Close</button>
+      </div>
+    </header>
+    <div class="list" id="historyList">
+      <div class="meta" style="padding:12px;">Loading…</div>
+    </div>
+  </aside>
+
+  <!-- Name-before-save modal -->
+  <div class="modal-backdrop" id="nameModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nameTitle">
+      <h3 id="nameTitle">Name this conversation</h3>
+      <p>Choose a friendly name. We’ll use it for the saved PDF filename.</p>
+      <div class="modal-row">
+        <input type="text" id="convName" placeholder="e.g., Leadership During Change" />
+      </div>
+      <div class="small">Tip: You can include spaces; we’ll make a clean filename.</div>
+      <div class="actions">
+        <button class="ghost" id="cancelSave">Cancel</button>
+        <button class="primary" id="confirmSave">Save PDF</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script>
     const chatMessages = document.getElementById('chatMessages');
     const messageInput = document.getElementById('messageInput');
     const sendButton   = document.getElementById('sendButton');
-    const exportBtn    = document.getElementById('exportBtn');
     const saveBtn      = document.getElementById('saveBtn');
+    const historyBtn   = document.getElementById('historyBtn');
     const newBtn       = document.getElementById('newBtn');
     const stopBtn      = document.getElementById('stopBtn');
     const toneSel      = document.getElementById('tone');
@@ -232,7 +305,18 @@
     const toast        = document.getElementById('toast');
     const avatar       = document.getElementById('avatar');
 
-    // Avatar graceful fallback to initials if the image fails
+    const drawer       = document.getElementById('historyDrawer');
+    const historyList  = document.getElementById('historyList');
+    const refreshBtn   = document.getElementById('refreshHistory');
+    const closeBtn     = document.getElementById('closeHistory');
+
+    // modal elements
+    const nameModal    = document.getElementById('nameModal');
+    const convName     = document.getElementById('convName');
+    const confirmSave  = document.getElementById('confirmSave');
+    const cancelSave   = document.getElementById('cancelSave');
+
+    // Avatar fallback
     avatar.addEventListener('error', () => {
       const badge = document.createElement('div');
       badge.textContent = 'HS';
@@ -240,87 +324,53 @@
       Object.assign(badge.style, {
         width:'72px', height:'72px', borderRadius:'50%', display:'grid', placeItems:'center',
         background:'rgba(255,255,255,.2)', color:'#fff',
-        border:'2px solid rgba(255,255,255,.7)', boxShadow:'0 2px 8px rgba(0,0,0,.15)',
-        fontWeight:'700'
+        border:'2px solid rgba(255,255,255,.7)', boxShadow:'0 2px 8px rgba(0,0,0,.15)', fontWeight:'700'
       });
       avatar.replaceWith(badge);
     });
 
-    // ---- Persistence for chat + settings ----
+    // Persistence
     const CHAT_KEY = 'hanza_chat_v4';
     const SETTINGS_KEY = 'hanza_settings_v1';
-
-    // Restore chat
     const saved = localStorage.getItem(CHAT_KEY);
     if (saved) chatMessages.innerHTML = saved;
-
-    // Restore settings
     const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
     toneSel.value   = savedSettings.tone   || 'balanced';
     lengthSel.value = savedSettings.length || 'concise';
-
     function saveChat(){ localStorage.setItem(CHAT_KEY, chatMessages.innerHTML); }
-    function saveSettings(){
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-        tone: toneSel.value, length: lengthSel.value
-      }));
-    }
+    function saveSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify({ tone: toneSel.value, length: lengthSel.value })); }
     toneSel.addEventListener('change', saveSettings);
     lengthSel.addEventListener('change', saveSettings);
 
-    // ---- Small helpers ----
-    function showToast(msg, ms=1400){
-      toast.textContent = msg;
-      toast.classList.add('show');
-      setTimeout(()=> toast.classList.remove('show'), ms);
-    }
-
-    // Auto-resize textarea
+    // Helpers
+    function showToast(msg, ms=1400){ toast.textContent = msg; toast.classList.add('show'); setTimeout(()=> toast.classList.remove('show'), ms); }
     messageInput.addEventListener('input', () => {
       messageInput.style.height = 'auto';
       messageInput.style.height = Math.min(messageInput.scrollHeight, 160) + 'px';
     });
 
-    // Markdown renderer (with code blocks)
+    // Markdown renderer (simple)
     function renderMarkdown(mdText=''){
       const esc = s => s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
       let s = esc(mdText);
-
-      // fenced code blocks ``` ... ```
       s = s.replace(/```([\s\S]*?)```/g, (m, code)=>`<pre><code>${code.replace(/^\n+|\n+$/g,'')}</code></pre>`);
-
-      // headings
       s = s.replace(/^### (.*)$/gm, '<h3>$1</h3>');
       s = s.replace(/^## (.*)$/gm, '<h2>$1</h2>');
       s = s.replace(/^# (.*)$/gm, '<h1>$1</h1>');
-
-      // bold / italic
       s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
       s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-      // lists
       s = s.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>');
       s = s.replace(/^\s*\d+\.\s+(.*)$/gm, '<li>$1</li>');
       s = s.replace(/(?:<li>.*<\/li>\n?)+/g, m=>`<ul>${m}</ul>`);
-
-      // inline code
       s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-      // paragraphs (don’t wrap block tags)
-      s = s.replace(/(^|\n)([^\n<][^\n]*)/g, (m,a,b)=>{
-        if (/^\s*<(h\d|ul|li|\/ul|pre|code)/.test(b)) return m;
-        return `${a}<p>${b}</p>`;
-      });
+      s = s.replace(/(^|\n)([^\n<][^\n]*)/g, (m,a,b)=>{ if (/^\s*<(h\d|ul|li|\/ul|pre|code)/.test(b)) return m; return `${a}<p>${b}</p>`; });
       return s;
     }
-
-    // Add copy buttons to <pre> code blocks
     function decorateCodeCopies(container){
       container.querySelectorAll('pre').forEach(pre=>{
         if (pre.querySelector('.code-copy')) return;
         const btn = document.createElement('button');
-        btn.className = 'code-copy';
-        btn.textContent = 'Copy';
+        btn.className = 'code-copy'; btn.textContent = 'Copy';
         btn.addEventListener('click', async ()=>{
           const code = pre.querySelector('code')?.innerText || '';
           try { await navigator.clipboard.writeText(code); btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',1200); }
@@ -329,7 +379,6 @@
         pre.appendChild(btn);
       });
     }
-
     function addMessage(content, isUser=false, isHtml=false){
       const row = document.createElement('div');
       row.className = `message ${isUser?'user':'bot'}`;
@@ -337,11 +386,9 @@
       bubble.className = 'message-content';
       if (isHtml) bubble.innerHTML = content; else bubble.textContent = content;
 
-      // Copy entire bubble for bot
       if (!isUser) {
         const btn = document.createElement('button');
-        btn.className = 'copy';
-        btn.textContent = 'Copy';
+        btn.className = 'copy'; btn.textContent = 'Copy';
         btn.addEventListener('click', async ()=>{
           const raw = bubble.innerText;
           try { await navigator.clipboard.writeText(raw); btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',1200); }
@@ -349,28 +396,24 @@
         });
         bubble.appendChild(btn);
       }
-
       row.appendChild(bubble);
       chatMessages.appendChild(row);
       chatMessages.scrollTop = chatMessages.scrollHeight;
       saveChat();
-
       if (!isUser) decorateCodeCopies(bubble);
-      return bubble; // for streaming
+      return bubble;
     }
 
-    // Streaming via SSE + Stop support + Typing dots
+    // STREAM + typing dots + stop
     let currentES = null;
     async function streamBotResponse(userMessage, opts, targetBubble){
       return new Promise((resolve)=>{
         const q = new URLSearchParams({ message:userMessage, tone:opts.tone, length:opts.length });
         const es = new EventSource(`/api/stream?${q.toString()}`);
-        currentES = es;
-        stopBtn.disabled = false;
+        currentES = es; stopBtn.disabled = false;
 
-        // show typing dots inside the target bubble until first tokens arrive
-        let buffer = '';
-        let raf = false;
+        // typing dots until first token lands
+        let buffer = ''; let raf = false;
         targetBubble.innerHTML = `
           <div class="typing-wrap">
             <span>Hanza is typing</span>
@@ -379,7 +422,7 @@
         `;
 
         const flush = ()=>{
-          if (!buffer) return; // keep dots until we have something
+          if (!buffer) return; // keep dots
           targetBubble.innerHTML = renderMarkdown(buffer);
           decorateCodeCopies(targetBubble);
           chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -388,20 +431,13 @@
         };
 
         es.onmessage = (e)=>{
-          if (e.data === '[DONE]'){
-            es.close(); currentES = null; stopBtn.disabled = true;
-            if (!raf) flush(); resolve(); return;
-          }
+          if (e.data === '[DONE]'){ es.close(); currentES = null; stopBtn.disabled = true; if (!raf) flush(); resolve(); return; }
           buffer += e.data;
           if (!raf){ raf = true; requestAnimationFrame(flush); }
         };
-
         es.onerror = ()=>{
           es.close(); currentES = null; stopBtn.disabled = true;
-          if (!buffer){
-            targetBubble.innerHTML = "⚠️ Streaming failed. Try again.";
-            saveChat();
-          }
+          if (!buffer){ targetBubble.textContent = "⚠️ Streaming failed. Try again."; saveChat(); }
           resolve();
         };
       });
@@ -413,42 +449,107 @@
     function currentOptions(){ return { tone: toneSel.value, length: lengthSel.value }; }
 
     async function handleSend(){
-      const msg = messageInput.value.trim();
-      if (!msg) return;
-
+      const msg = messageInput.value.trim(); if (!msg) return;
       addMessage(msg, true);
       messageInput.value=''; messageInput.style.height='auto';
       sendButton.disabled = true;
 
-      // create the bot bubble immediately (we fill typing dots + stream into it)
       const botBubble = addMessage('', false, true);
-
-      const opts = currentOptions();
-      await streamBotResponse(msg, opts, botBubble);
+      await streamBotResponse(msg, currentOptions(), botBubble);
 
       sendButton.disabled = false;
     }
 
     sendButton.addEventListener('click', handleSend);
-    messageInput.addEventListener('keypress', (e)=>{
-      if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
-    });
+    messageInput.addEventListener('keypress', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); } });
 
-    // Export chat as Markdown (client-side download)
-    exportBtn.addEventListener('click', ()=>{
-      const parts = Array.from(document.querySelectorAll('.message')).map(m=>{
-        const isUser = m.classList.contains('user');
-        const raw = m.querySelector('.message-content').innerText.replace(/\s*Tip:.*$/,'').trim();
-        return `${isUser ? 'You' : 'Hanza'}:\n${raw}\n`;
-      }).join('\n---\n\n');
-      const blob = new Blob([parts], {type:'text/markdown;charset=utf-8'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'hanza_session.md'; a.click();
-      URL.revokeObjectURL(url);
-      showToast('Exported as Markdown');
-    });
+    // ------- History drawer (Open / Download / Delete / Jump Back In) -------
+    async function loadHistory(){
+      historyList.innerHTML = '<div class="meta" style="padding:12px;">Loading…</div>';
+      try{
+        const r = await fetch('/api/transcripts'); const data = await r.json();
+        if (!data?.ok) throw new Error('bad');
+        if (!data.files.length){ historyList.innerHTML = '<div class="meta" style="padding:12px;">No saved conversations yet.</div>'; return; }
+        historyList.innerHTML = '';
+        data.files.forEach(f=>{
+          const row = document.createElement('div'); row.className = 'file';
+          const when = new Date(f.mtime).toLocaleString();
+          const sizeKB = Math.max(1, Math.round(f.size/1024));
+          row.innerHTML = `
+            <div class="meta">
+              <div><strong>${f.name}</strong></div>
+              <div style="font-size:12px; color:#667;">${when} • ${sizeKB} KB</div>
+            </div>
+            <div class="actions">
+              <button data-open>Open</button>
+              <button data-dl>Download</button>
+              ${f.jsonUrl ? '<button data-jump>Jump Back In</button>' : ''}
+              <button data-del style="border-color:#f3c2c2;background:#fff0f0;">Delete</button>
+            </div>`;
+          row.querySelector('[data-open]').addEventListener('click', ()=> window.open(f.url, '_blank'));
+          row.querySelector('[data-dl]').addEventListener('click', ()=>{
+            const a = document.createElement('a'); a.href = f.url; a.download = f.name; a.click();
+          });
+          if (f.jsonUrl) {
+            row.querySelector('[data-jump]').addEventListener('click', async ()=>{
+              try{
+                const jr = await fetch(f.jsonUrl);
+                const j = await jr.json();
+                if (!Array.isArray(j.transcript)) throw new Error();
+                // rebuild UI from transcript
+                chatMessages.innerHTML = '';
+                j.transcript.forEach(turn=>{
+                  const isUser = turn.role === 'user';
+                  const content = turn.text || '';
+                  addMessage(content, isUser, false);
+                });
+                showToast('Conversation loaded.');
+                // close drawer + focus
+                closeDrawer(); messageInput.focus();
+              }catch{
+                showToast('Could not load conversation.');
+              }
+            });
+          }
+          row.querySelector('[data-del]').addEventListener('click', async ()=>{
+            if (!confirm(`Delete "${f.name}"? This cannot be undone.`)) return;
+            try{
+              const del = await fetch(`/api/transcripts/${encodeURIComponent(f.name)}`, { method:'DELETE' });
+              const res = await del.json().catch(()=> ({}));
+              if (res?.ok){ showToast('Deleted'); loadHistory(); }
+              else { showToast('Delete failed'); }
+            }catch{ showToast('Delete failed'); }
+          });
+          historyList.appendChild(row);
+        });
+      }catch{
+        historyList.innerHTML = '<div class="meta" style="padding:12px;">Failed to load history.</div>';
+      }
+    }
+    function openDrawer(){ drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); loadHistory(); }
+    function closeDrawer(){ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); }
+    historyBtn.addEventListener('click', openDrawer);
+    closeBtn.addEventListener('click', closeDrawer);
+    refreshBtn.addEventListener('click', loadHistory);
 
-    // Save transcript to server
+    // ------- Name + Save (PDF on server) -------
+    function slugifyName(s=''){
+      return s
+        .toLowerCase()
+        .replace(/[^a-z0-9\s\-_.]/g,'')
+        .trim()
+        .replace(/\s+/g,'-')
+        .replace(/\-+/g,'-') || 'conversation';
+    }
+    function firstUserLine(){
+      const el = document.querySelector('.message.user .message-content');
+      return (el?.innerText || '').split('\n').find(Boolean) || '';
+    }
+    function defaultTitle(){
+      const base = firstUserLine().slice(0,60) || 'hanza_session';
+      const stamp = new Date().toISOString().slice(0,16).replace('T','_').replace(/:/g,'-');
+      return `${slugifyName(base)}_${stamp}`;
+    }
     function collectTranscript(){
       return Array.from(document.querySelectorAll('.message')).map(m=>{
         const role = m.classList.contains('user') ? 'user' : 'assistant';
@@ -456,18 +557,36 @@
         return { role, text };
       });
     }
-    saveBtn.addEventListener('click', async ()=>{
+
+    function openNameModal(){
+      nameModal.style.display = 'flex';
+      convName.value = defaultTitle().replace(/_/g,' ');
+      setTimeout(()=> convName.focus(), 0);
+    }
+    function closeNameModal(){ nameModal.style.display = 'none'; }
+
+    saveBtn.addEventListener('click', openNameModal);
+    cancelSave.addEventListener('click', closeNameModal);
+    nameModal.addEventListener('click', (e)=>{ if (e.target === nameModal) closeNameModal(); });
+    convName.addEventListener('keypress', (e)=>{ if (e.key === 'Enter') confirmSave.click(); });
+
+    confirmSave.addEventListener('click', async ()=>{
+      const pretty = convName.value.trim() || defaultTitle();
+      const title  = slugifyName(pretty);
       try{
         const transcript = collectTranscript();
-        const title = transcript.find(t=>t.role==='user')?.text?.slice(0,60) || 'hanza_session';
         const r = await fetch('/api/save',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ transcript, format:'md', title })
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ transcript, format:'pdf', title })
         });
         const data = await r.json();
-        if (data?.ok) showToast(`Saved: ${data.file}`);
-        else showToast('Save failed');
+        if (data?.ok){
+          showToast(`Saved: ${data.file}`);
+          closeNameModal();
+          if (drawer.classList.contains('open')) loadHistory();
+        } else {
+          showToast('Save failed');
+        }
       }catch{ showToast('Save failed'); }
     });
 
@@ -482,9 +601,7 @@
           </div>
         </div>
       `;
-      saveChat();
-      showToast('New chat started');
-      messageInput.focus();
+      saveChat(); showToast('New chat started'); messageInput.focus();
     });
 
     // Focus input on load

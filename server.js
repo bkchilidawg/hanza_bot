@@ -1,17 +1,56 @@
 import express from "express";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import PDFDocument from "pdfkit";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
 const app   = express();
 const PORT  = process.env.PORT || 3000;
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const DEMO  = String(process.env.DEMO_MODE || "").toLowerCase() === "true";
 
-app.use(express.json());
-app.use(express.static("public"));
+const EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small";
 
-// ---------- helpers ----------
+// ---- Paths
+const PUBLIC_DIR   = path.join(__dirname, "public");
+const DATA_DIR     = path.join(__dirname, "data");
+const SRC_DIR      = path.join(DATA_DIR, "sources");
+const INDEX_FILE   = path.join(DATA_DIR, "index.json");
+const STYLE_FILE   = path.join(PUBLIC_DIR, "style_guide.md");
+const TRANSCRIPTS  = path.join(DATA_DIR, "transcripts");
+
+// Ensure dirs
+fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(SRC_DIR,  { recursive: true });
+fs.mkdirSync(TRANSCRIPTS, { recursive: true });
+
+app.use(express.json({ limit: "2mb" }));
+app.use(express.static(PUBLIC_DIR));
+app.use("/transcripts", express.static(TRANSCRIPTS)); // serve PDFs
+
+// ---- Load style guide once (with a safe cap)
+let STYLE_GUIDE = "";
+try {
+  STYLE_GUIDE = fs.readFileSync(STYLE_FILE, "utf8").slice(0, 8000);
+  console.log("✅ Loaded style guide.");
+} catch { console.warn("ℹ️ No style_guide.md found. (Optional)"); }
+
+// ---- Load RAG index (if available)
+let RAG_INDEX = null;
+try {
+  RAG_INDEX = JSON.parse(fs.readFileSync(INDEX_FILE, "utf8"));
+  console.log(`✅ Loaded RAG index: ${RAG_INDEX.count} chunk(s).`);
+} catch {
+  console.warn("ℹ️ No data/index.json found. Retrieval disabled until you build the index.");
+}
+
+// ===== Utilities =====
 function styleInstruction(tone = "balanced", length = "standard") {
   const toneMap = {
     balanced:      "Use a balanced, approachable professional tone.",
@@ -31,21 +70,6 @@ function styleInstruction(tone = "balanced", length = "standard") {
   return `${toneMap[tone] || toneMap.balanced} ${lengthMap[length] || lengthMap.standard}`;
 }
 
-function buildMessages(userPrompt, tone, length) {
-  const style = styleInstruction(tone, length);
-  return [
-    {
-      role: "system",
-      content:
-        "You are a blog writing assistant trained in Hanza Stephens' voice and style. " +
-        "Write as a calm, strategic operator: practical, structured, and insightful. " +
-        "Favor clear section headings, bullets, and concrete frameworks over fluff."
-    },
-    { role: "system", content: `Stylistic guidance: ${style}` },
-    { role: "user", content: userPrompt }
-  ];
-}
-
 function sseHeaders() {
   return {
     "Content-Type": "text/event-stream",
@@ -55,14 +79,12 @@ function sseHeaders() {
   };
 }
 
-function escapeSSE(s = "") {
-  // keep it simple: remove null chars that can break streams
-  return s.replace(/\u0000/g, "");
-}
+function escapeSSE(s = "") { return s.replace(/\u0000/g, ""); }
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 function capitalize(s) { return (s || "").charAt(0).toUpperCase() + (s || "").slice(1); }
 
+// ===== DEMO draft for offline mode =====
 function demoDraft(topic, tone, length) {
   const style = styleInstruction(tone, length);
   const title = `A Practical Guide to ${capitalize(topic)}`;
@@ -93,30 +115,141 @@ function demoDraft(topic, tone, length) {
     `**Bottom line:** Start small, measure, iterate.`
   ].join("\n");
 }
-
 async function streamDemoDraft(res, topic, tone, length) {
   const text = demoDraft(topic, tone, length);
-  for (const ch of text) {
-    res.write(`data: ${escapeSSE(ch)}\n\n`);
-    await delay(5);
-  }
-  res.write(`data: [DONE]\n\n`);
-  res.end();
+  for (const ch of text) { res.write(`data: ${escapeSSE(ch)}\n\n`); await delay(5); }
+  res.write(`data: [DONE]\n\n`); res.end();
 }
 
-// ---------- diagnostics ----------
-app.get("/health", (_req, res) => res.json({ ok: true, port: PORT }));
-app.get("/config", (_req, res) => res.json({ model: MODEL, demo: DEMO }));
+// ====== Retrieval helpers ======
+function cosineSim(a = [], b = []) {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i], y = b[i];
+    dot += x * y;
+    na  += x * x;
+    nb  += y * y;
+  }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-8);
+}
 
-// ---------- non-stream endpoint (used when "Stream" toggle is off) ----------
+async function embedText(text) {
+  const r = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ input: text, model: EMBED_MODEL })
+  });
+  if (!r.ok) {
+    const msg = await r.text().catch(()=> "");
+    throw new Error(`Embeddings API error ${r.status}: ${msg}`);
+  }
+  const data = await r.json();
+  return data.data[0].embedding;
+}
+
+/**
+ * Retrieve topK similar chunks from index.
+ * token/char budget: trims content so we don't overflow context.
+ */
+async function retrieveSimilar(query, { topK = 4, maxCharsTotal = 3000 } = {}) {
+  if (!RAG_INDEX?.records?.length) return [];
+
+  const qVec = await embedText(query);
+  const scored = RAG_INDEX.records.map(r => ({
+    ...r,
+    score: cosineSim(qVec, r.embedding)
+  })).sort((a,b) => b.score - a.score);
+
+  // accumulate up to maxCharsTotal
+  const results = [];
+  let used = 0;
+  for (const rec of scored) {
+    if (results.length >= topK) break;
+    const remaining = Math.max(0, maxCharsTotal - used);
+    if (remaining < 200) break;
+    const snippet = rec.content.slice(0, remaining);
+    results.push({
+      title: rec.title,
+      file: rec.file,
+      content: snippet,
+      score: rec.score
+    });
+    used += snippet.length;
+  }
+  return results;
+}
+
+function buildMessages(userPrompt, tone, length, retrieved = []) {
+  const style = styleInstruction(tone, length);
+
+  const baseSystem =
+    "You are a blog writing assistant trained in Hanza Stephens' voice and style. " +
+    "Write as a calm, strategic operator: practical, structured, and insightful. " +
+    "Favor clear section headings, bullets, and concrete frameworks over fluff.";
+
+  const guide = STYLE_GUIDE
+    ? `\n\n### VOICE GUIDE (Highest priority)\n${STYLE_GUIDE}\n\nFollow this guide strictly.`
+    : "";
+
+  const formattingRules =
+    "Format with clean markdown: use H1/H2/H3 headings, bullets, numbered steps, and code fences for templates where helpful. " +
+    "Avoid emojis unless the user asks. Keep advice concrete and de-jargonized.";
+
+  // Build a compact “Reference Excerpts” block
+  let refs = "";
+  if (retrieved?.length) {
+    const blocks = retrieved.map((r, i) =>
+      `— Source ${i+1}: ${r.title}\n${r.content.trim()}`
+    ).join("\n\n");
+    refs = `\n\n### REFERENCE EXCERPTS (Use for tone & examples; do not cite verbatim)\n${blocks}`;
+  }
+
+  return [
+    { role: "system", content: `${baseSystem}${guide}\n\n${formattingRules}${refs}` },
+    { role: "system", content: `Stylistic guidance: ${style}` },
+    { role: "user",   content: userPrompt }
+  ];
+}
+
+// ====== Health + config ======
+app.get("/health", (_req, res) => res.json({ ok: true, port: PORT }));
+app.get("/config", (_req, res) => res.json({
+  model: MODEL, demo: DEMO,
+  rag: Boolean(RAG_INDEX?.records?.length),
+  embed_model: EMBED_MODEL
+}));
+
+// Optional: reload style and index without restarting
+app.post("/admin/reload-style", (_req, res) => {
+  try {
+    STYLE_GUIDE = fs.readFileSync(STYLE_FILE, "utf8").slice(0, 8000);
+    res.json({ ok: true, bytes: STYLE_GUIDE.length });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+app.post("/admin/reload-index", (_req, res) => {
+  try {
+    RAG_INDEX = JSON.parse(fs.readFileSync(INDEX_FILE, "utf8"));
+    res.json({ ok: true, count: RAG_INDEX.count });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e) });
+  }
+});
+
+// ====== Non-stream (UI always streams, but keep this) ======
 app.post("/api/chat", async (req, res) => {
   try {
     const { message, tone = "balanced", length = "standard" } = req.body || {};
     if (!message) return res.status(400).json({ error: "Missing 'message'." });
 
-    if (DEMO) {
-      return res.json({ reply: demoDraft(message, tone, length) });
-    }
+    if (DEMO) return res.json({ reply: demoDraft(message, tone, length) });
+
+    // RAG retrieve
+    const retrieved = await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -126,56 +259,47 @@ app.post("/api/chat", async (req, res) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        messages: buildMessages(message, tone, length),
-        temperature: 0.75,
-        max_tokens: 1200
+        messages: buildMessages(message, tone, length, retrieved),
+        temperature: 0.7,
+        max_tokens: 1500
       })
     });
 
     if (!resp.ok) {
       const txt = await resp.text().catch(() => "");
       console.error("OpenAI error:", resp.status, txt);
-
-      if (resp.status === 404 || /model.*not.*found/i.test(txt)) {
-        return res.status(200).json({
-          reply: `⚠️ The selected model is not available to this key. Current model: "${MODEL}". Try OPENAI_MODEL=gpt-4o-mini in your .env, then restart.`
-        });
-      }
-      if (resp.status === 429 || /insufficient_quota|quota/i.test(txt)) {
-        return res.status(200).json({
-          reply: "⚠️ Your OpenAI project has no remaining credit. Add billing or set DEMO_MODE=true to test."
-        });
-      }
-      return res.status(200).json({ reply: "⚠️ The AI service returned an error. Please try again." });
+      if (resp.status === 404) return res.json({ reply: `⚠️ Model "${MODEL}" unavailable. Try OPENAI_MODEL=gpt-4o-mini.` });
+      if (resp.status === 429) return res.json({ reply: "⚠️ No remaining credit. Add billing or set DEMO_MODE=true." });
+      return res.json({ reply: "⚠️ The AI service returned an error. Please try again." });
     }
 
     const data = await resp.json();
-    const reply = data?.choices?.[0]?.message?.content?.trim() || "⚠️ No content returned from the AI.";
+    const reply = data?.choices?.[0]?.message?.content?.trim() || "⚠️ No content returned.";
     res.json({ reply });
   } catch (err) {
     console.error("Server error:", err);
-    res.status(200).json({ reply: "⚠️ Server error. Check the console for details." });
+    res.json({ reply: "⚠️ Server error. Check logs." });
   }
 });
 
-// ---------- stream endpoint (SSE) for the UI "Stream" mode ----------
+// ====== Stream (SSE) ======
 app.get("/api/stream", async (req, res) => {
   try {
-    const message = req.query.message || "";
-    const tone    = req.query.tone || "balanced";
-    const length  = req.query.length || "standard";
-    res.writeHead(200, sseHeaders());
+    const message = String(req.query.message || "");
+    const tone    = String(req.query.tone || "balanced");
+    const length  = String(req.query.length || "standard");
 
+    res.writeHead(200, sseHeaders());
     if (!message) {
       res.write(`data: Missing 'message'.\n\n`);
       res.write(`data: [DONE]\n\n`);
       return res.end();
     }
 
-    if (DEMO) {
-      await streamDemoDraft(res, message, tone, length);
-      return;
-    }
+    if (DEMO) return streamDemoDraft(res, message, tone, length);
+
+    // RAG retrieve
+    const retrieved = await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -185,9 +309,9 @@ app.get("/api/stream", async (req, res) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        messages: buildMessages(message, tone, length),
-        temperature: 0.75,
-        max_tokens: 1500,
+        messages: buildMessages(message, tone, length, retrieved),
+        temperature: 0.7,
+        max_tokens: 1700,
         stream: true
       })
     });
@@ -195,14 +319,9 @@ app.get("/api/stream", async (req, res) => {
     if (!resp.ok || !resp.body) {
       const txt = await resp.text().catch(() => "");
       console.error("OpenAI stream error:", resp.status, txt);
-
-      if (resp.status === 404 || /model.*not.*found/i.test(txt)) {
-        res.write(`data: ⚠️ Model unavailable: "${MODEL}". Try OPENAI_MODEL=gpt-4o-mini in .env.\n\n`);
-      } else if (resp.status === 429 || /insufficient_quota|quota/i.test(txt)) {
-        res.write(`data: ⚠️ No remaining credit. Add billing or set DEMO_MODE=true.\n\n`);
-      } else {
-        res.write(`data: ⚠️ Failed to start stream.\n\n`);
-      }
+      if (resp.status === 404) res.write(`data: ⚠️ Model "${MODEL}" unavailable.\n\n`);
+      else if (resp.status === 429) res.write(`data: ⚠️ No project credit. Add billing or enable DEMO_MODE.\n\n`);
+      else res.write(`data: ⚠️ Failed to start stream.\n\n`);
       res.write(`data: [DONE]\n\n`);
       return res.end();
     }
@@ -214,7 +333,6 @@ app.get("/api/stream", async (req, res) => {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
       const chunk = decoder.decode(value, { stream: true });
       const lines = (leftover + chunk).split(/\r?\n/);
       leftover = lines.pop() || "";
@@ -232,7 +350,7 @@ app.get("/api/stream", async (req, res) => {
           const token = json.choices?.[0]?.delta?.content || "";
           if (token) res.write(`data: ${escapeSSE(token)}\n\n`);
         } catch {
-          // ignore keep-alives/heartbeat lines
+          // ignore keep-alives
         }
       }
     }
@@ -249,8 +367,81 @@ app.get("/api/stream", async (req, res) => {
   }
 });
 
-// ---------- start ----------
+// ====== Save transcript (PDF or MD) + list/delete (you already have this) ======
+app.post("/api/save", async (req, res) => {
+  try {
+    const { transcript = [], format = "pdf", title = "hanza_session" } = req.body || {};
+    if (!Array.isArray(transcript) || !transcript.length) return res.json({ ok:false, error:"empty transcript" });
+
+    const safe = s => (s || "").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_").slice(0, 60);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const base  = `${safe(title) || "hanza_session"}__${stamp}`;
+    let outfile;
+
+    if (format === "md") {
+      outfile = path.join(TRANSCRIPTS, `${base}.md`);
+      const md = transcript.map(t => `${t.role === "user" ? "You" : "Hanza"}:\n${t.text}\n`).join("\n---\n\n");
+      fs.writeFileSync(outfile, md, "utf8");
+      return res.json({ ok:true, file: path.basename(outfile), url: `/transcripts/${path.basename(outfile)}` });
+    }
+
+    // PDF
+    outfile = path.join(TRANSCRIPTS, `${base}.pdf`);
+    const doc = new PDFDocument({ margin: 50 });
+    const stream = fs.createWriteStream(outfile);
+    doc.pipe(stream);
+
+    doc.fontSize(18).text(title, { underline: false });
+    doc.moveDown(0.5);
+    transcript.forEach(({ role, text }) => {
+      doc.fontSize(12).fillColor("#555").text(role === "user" ? "You" : "Hanza", { continued:false });
+      doc.moveDown(0.1);
+      doc.fontSize(12).fillColor("#000").text(text);
+      doc.moveDown(0.6);
+    });
+
+    doc.end();
+    stream.on("finish", () => {
+      res.json({ ok:true, file: path.basename(outfile), url: `/transcripts/${path.basename(outfile)}` });
+    });
+    stream.on("error", (e) => res.status(500).json({ ok:false, error: String(e) }));
+  } catch (e) {
+    res.status(500).json({ ok:false, error: String(e) });
+  }
+});
+
+app.get("/api/transcripts", async (_req, res) => {
+  try {
+    const files = fs.readdirSync(TRANSCRIPTS).filter(f => f.endsWith(".pdf") || f.endsWith(".md"));
+    const list = files.map(f => {
+      const st = fs.statSync(path.join(TRANSCRIPTS, f));
+      return {
+        name: f,
+        size: st.size,
+        mtime: st.mtime,
+        url: `/transcripts/${encodeURIComponent(f)}`
+      };
+    }).sort((a,b)=> b.mtime - a.mtime);
+    res.json({ ok:true, files: list });
+  } catch (e) {
+    res.status(500).json({ ok:false, error: String(e) });
+  }
+});
+
+app.delete("/api/transcripts/:file", (req, res) => {
+  try {
+    const file = req.params.file;
+    const target = path.join(TRANSCRIPTS, file);
+    if (!fs.existsSync(target)) return res.status(404).json({ ok:false, error:"Not found" });
+    fs.unlinkSync(target);
+    res.json({ ok:true });
+  } catch (e) {
+    res.status(500).json({ ok:false, error: String(e) });
+  }
+});
+
+// ====== start ======
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
-  console.log("Using model:", MODEL, "| DEMO_MODE:", DEMO);
+  console.log("Using model:", MODEL, "| DEMO_MODE:", DEMO, "| RAG:", Boolean(RAG_INDEX?.records?.length));
 });
