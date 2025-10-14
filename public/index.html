@@ -7,15 +7,14 @@
   <style>
     :root{
       --brand1:#9f9481; --brand2:#9f9481;
-      --user1:#c2e6f1; --user2:#c2e6f1;
+      --user1:#aedbe9; --user2:#aedbe9;
       --bg:#adc0af;                 /* lighter green behind chat area */
       --page:#838373;               /* single-page background color */
       --white:#9f9481; --border:#e2e8f0; --ink:#222; --muted:#666;
       --code-bg:#f6f6f6; --code-bd:#eee; --toast-bg:#111; --toast-fg:#fff;
       --drawer:#f6faf7;             /* history drawer background */
-      /* NEW: bot bubble light pink */
-      --botPink:#ebd7e0;
-      --botPinkBorder:#ffd6e7;
+      --botPink:#f7cadf; --botPinkBorder:#ffd6e7;
+      --title:#0f172a;
     }
     *{box-sizing:border-box}
     body{
@@ -28,12 +27,13 @@
       background:var(--white); border-radius:24px;
       box-shadow: 0 25px 50px rgba(0,0,0,0.15);
       display:flex; flex-direction:column; overflow:hidden;
+      position:relative;
     }
 
     /* Header */
     .chat-header{
       background: linear-gradient(135deg, var(--brand1) 0%, var(--brand2) 100%);
-      color:white; padding:12px 16px; font-size:18px; font-weight:700;
+      color:white; padding:8px 16px; font-size:18px; font-weight:700;
       display:flex; align-items:center; justify-content:space-between; gap:12px;
       border-bottom:1px solid rgba(255,255,255,.18);
     }
@@ -46,6 +46,22 @@
     .avatar{ width:72px; height:72px; border-radius:50%; object-fit:cover; object-position:center;
       border:2px solid rgba(255,255,255,.7); box-shadow: 0 2px 8px rgba(0,0,0,.15); background:#ddd; }
     .brand-name{ font-size:16px; font-weight:700; letter-spacing:.2px; }
+
+    /* Session title (auto + inline rename) */
+    .session-title{
+      flex:1; text-align:center; color:#fff; opacity:.95; font-weight:700; letter-spacing:.2px;
+      user-select:none;
+    }
+    .session-title .edit{
+      margin-left:8px; font-size:12px; cursor:pointer;
+      border:1px solid rgba(255,255,255,.6);
+      padding:2px 6px; border-radius:8px;
+      background:rgba(255,255,255,.12);
+      color:#fff;                 /* Rename text white */
+    }
+    .session-title[contenteditable="true"]{
+      background:rgba(255,255,255,.14); border-radius:8px; padding:2px 8px; outline:1px solid rgba(255,255,255,.35);
+    }
 
     .toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
     .control{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.12);
@@ -64,27 +80,51 @@
     .btn.stop{border-color:#ffb3b3; color:#fff; background:rgba(255,0,179,0.15)}
     .btn.stop[disabled]{opacity:.5; cursor:not-allowed}
 
-    .chat-messages{flex:1; padding:24px; overflow-y:auto; background:var(--bg);}
-    .message{margin-bottom:20px; display:flex;}
+    .chat-messages{
+      flex:1; padding:24px; overflow-y:auto; background:var(--bg); scroll-behavior:smooth;
+    }
+    .message{margin-bottom:26px; display:flex; position:relative;}
     .message.user{justify-content:flex-end;}
     .message-content{
       position:relative; max-width:75%; padding:12px 16px; border-radius:18px; font-size:15px; line-height:1.55;
       border:1px solid transparent; white-space:normal; word-wrap:break-word;
     }
     .message.user .message-content{
-      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%);
-      /* color will be overridden to black below */
+      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%); color:#000; /* user text black */
       box-shadow: 0 2px 10px rgba(0,0,0,.06); border: 1px solid rgba(0,0,0,.05);
     }
-    /* CHANGED: bot bubble → very light pink */
+    /* bot bubble: pink with black text + extra right padding for copy button, no extra bottom gap */
     .message.bot .message-content{
       background:var(--botPink);
       border-color:var(--botPinkBorder);
-      /* color will be overridden to black below */
+      color:#000;
+      padding-right:56px;       /* space so copy button doesn't cover text */
+      margin-bottom:6px;        /* tighter spacing */
     }
 
-    .copy{ position:absolute; top:8px; right:8px; border:none; background:#f3eef2; color:#333;
-      padding:4px 8px; border-radius:10px; font-size:12px; cursor:pointer; }
+    /* Bubble controls */
+    .bubble-actions{
+      display:flex; gap:6px; position:absolute; bottom:-22px; left:8px; font-size:12px; opacity:.85;
+    }
+    .bubble-actions button{
+      border:1px solid #e5e7eb; background:#fff; padding:2px 6px; border-radius:8px; cursor:pointer; font-size:12px;
+    }
+    .bubble-actions button:hover{ background:#f3f4f6; }
+
+    /* Reactions row */
+    .reactions{
+      display:flex; gap:6px; margin-top:6px; opacity:.9;
+    }
+    .reactions button{
+      border:1px solid #f1d7e2; background:#fff; padding:2px 6px; border-radius:12px; cursor:pointer; font-size:12px;
+    }
+    .reactions button:hover{ background:#ffeaf3; }
+
+    /* Copy button — only on bot messages (JS) */
+    .copy{
+      position:absolute; top:8px; right:8px; border:none; background:#f3eef2; color:#333;
+      padding:4px 8px; border-radius:10px; font-size:12px; cursor:pointer; z-index:1;
+    }
     .copy:hover{background:#e9e7e2}
 
     .chat-input-container{
@@ -100,26 +140,13 @@
     .send-button[disabled]{opacity:.6; cursor:not-allowed}
     .note{margin-top:4px; font-size:12px; color:var(--muted);}
 
-    /* Markdown prettify */
-    .message.bot .message-content h1,.message.bot .message-content h2,.message.bot .message-content h3{margin:6px 0 8px}
-    .message.bot .message-content h1{font-size:20px}
-    .message.bot .message-content h2{font-size:18px}
-    .message.bot .message-content h3{font-size:16px}
-    .message.bot .message-content ul,.message.bot .message-content ol{margin:6px 0 6px 20px}
-    .message.bot .message-content p{margin:6px 0}
-    .message.bot .message-content code{
-      background:var(--code-bg); border:1px solid var(--code-bd); padding:0 4px; border-radius:4px;
-      font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    /* Slash menu hint */
+    .slash-menu{
+      position:absolute; bottom:60px; left:28px; background:#fff; border:1px solid #e5e7eb; border-radius:12px;
+      box-shadow:0 12px 30px rgba(0,0,0,.12); padding:8px; display:none; min-width:260px; z-index:5;
     }
-    .message.bot .message-content pre{
-      background:var(--code-bg); border:1px solid var(--code-bd);
-      padding:10px; border-radius:10px; overflow:auto; margin:8px 0; position:relative;
-    }
-    .message.bot .message-content pre .code-copy{
-      position:absolute; top:8px; right:8px; font-size:12px; padding:4px 8px; border-radius:8px;
-      border:1px solid #ddd; background:#fff; cursor:pointer;
-    }
-    .message.bot .message-content pre .code-copy:hover{background:#f6f6f6}
+    .slash-menu .item{ padding:8px 10px; border-radius:8px; cursor:pointer; }
+    .slash-menu .item:hover{ background:#f6f7f9; }
 
     /* Typing dots animation */
     .typing-wrap{display:inline-flex; align-items:center; gap:8px; color:#64748b;}
@@ -132,7 +159,7 @@
     .toast{
       position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
       background:var(--toast-bg); color:var(--toast-fg); padding:10px 14px; border-radius:10px;
-      font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s ease;
+      font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:100;
     }
     .toast.show{opacity:.95}
 
@@ -144,7 +171,7 @@
       display:flex; flex-direction:column;
     }
     .drawer.open{ transform: translateX(0); }
-    .drawer header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e5eee8; }
+    .drawer header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e5eee8; gap:8px; }
     .drawer h3{ margin:0; font-size:18px; }
     .drawer .list{ flex:1; overflow:auto; padding:10px 12px; }
     .file{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid #e5eee8;
@@ -152,6 +179,8 @@
     .file .meta { font-size:13px; color:#334; }
     .file .actions button{ margin-left:8px; border:1px solid #ddd; background:#f8faf9; padding:6px 8px; border-radius:8px; cursor:pointer; }
     .file .actions button:hover{ background:#eef5f1; }
+    .drawer .search{flex:1; margin-left:8px;}
+    .drawer input[type="search"]{width:100%; padding:8px 10px; border:1px solid #d7e2dc; border-radius:10px;}
 
     /* Save-name modal */
     .modal-backdrop{
@@ -177,27 +206,19 @@
     .modal .actions .primary:hover{ filter:brightness(1.1); }
     .modal .actions .ghost:hover{ background:#f3f4f6; }
 
-    /* -------------------- Chat text to black (header unchanged) -------------------- */
-    .chat-messages { color: #000; }
-    .message.bot .message-content,
-    .message.user .message-content { color: #000; }
+    /* Jump to latest floater */
+    .to-latest{
+      position:absolute; left:50%; bottom:88px; transform:translateX(-50%);
+      background:#fff; border:1px solid #e5e7eb; border-radius:999px; padding:8px 12px; font-weight:600;
+      box-shadow:0 6px 20px rgba(0,0,0,.12); display:none; cursor:pointer; z-index:2;
+    }
 
-    .message.bot .message-content h1,
-    .message.bot .message-content h2,
-    .message.bot .message-content h3,
-    .message.bot .message-content p,
-    .message.bot .message-content li,
-    .message.bot .message-content code { color:#000; }
-
-    .chat-input { color:#000; }
-    .chat-input::placeholder { color:#444; }
-    /* ----------------------------------------------------------------------------- */
-
-    /* Mobile: stack toolbar */
+    /* Mobile */
     @media (max-width:700px){
-      .chat-header{ flex-direction:column; align-items:stretch; gap:10px; }
+      .chat-header{ flex-direction:column; align-items:stretch; gap:8px; }
       .toolbar{ justify-content:center; }
       .brand{ min-width:auto; }
+      .session-title{ order:3; padding-bottom:4px; }
     }
     @media (max-width:600px){
       .chat-container{width:100%; height:100%; border-radius:0;}
@@ -213,6 +234,10 @@
       <div class="brand">
         <img class="avatar" id="avatar" src="/assets/hanza.jpg?v=1" alt="Hanza Stephens" />
         <span class="brand-name">Hanza Bot</span>
+      </div>
+
+      <div class="session-title" id="sessionTitle">
+        Untitled Session <button class="edit" id="editTitleBtn" title="Rename">Rename</button>
       </div>
 
       <div class="toolbar">
@@ -247,16 +272,20 @@
     <div class="chat-messages" id="chatMessages">
       <div class="message bot">
         <div class="message-content">
-          👋 Hi Hanza! I'm your AI assistant for writing blog posts in your voice and style.
-          Choose a <strong>Tone</strong> and <strong>Length</strong>, then ask me to create, brainstorm, or polish a post.
-          <div class="note">Tip: Enter to send, Shift+Enter for a new line.</div>
+          👋 New session. Tell me the topic, pick <strong>Tone</strong> and <strong>Length</strong>, and I'll draft in your voice.
+          <div class="note">Tip: Enter to send, Shift+Enter for a new line. Type <code>/</code> for quick presets.</div>
         </div>
       </div>
     </div>
 
+    <button class="to-latest" id="toLatest">Jump to latest ⬇️</button>
+
     <div class="chat-input-container">
       <textarea class="chat-input" id="messageInput" placeholder="Write a blog post about leadership during change..." rows="1"></textarea>
       <button class="send-button" id="sendButton">Send 📤</button>
+
+      <!-- Slash menu -->
+      <div class="slash-menu" id="slashMenu"></div>
     </div>
   </div>
 
@@ -264,6 +293,7 @@
   <aside class="drawer" id="historyDrawer" aria-hidden="true">
     <header>
       <h3>Saved Conversations</h3>
+      <input class="search" id="historySearch" type="search" placeholder="Search titles…" />
       <div>
         <button id="refreshHistory">Refresh</button>
         <button id="closeHistory">Close</button>
@@ -309,12 +339,18 @@
     const historyList  = document.getElementById('historyList');
     const refreshBtn   = document.getElementById('refreshHistory');
     const closeBtn     = document.getElementById('closeHistory');
+    const historySearch= document.getElementById('historySearch');
 
-    // modal elements
     const nameModal    = document.getElementById('nameModal');
     const convName     = document.getElementById('convName');
     const confirmSave  = document.getElementById('confirmSave');
     const cancelSave   = document.getElementById('cancelSave');
+
+    const sessionTitle = document.getElementById('sessionTitle');
+    const editTitleBtn = document.getElementById('editTitleBtn');
+    const toLatestBtn  = document.getElementById('toLatest');
+
+    const slashMenu    = document.getElementById('slashMenu');
 
     // Avatar fallback
     avatar.addEventListener('error', () => {
@@ -332,21 +368,28 @@
     // Persistence
     const CHAT_KEY = 'hanza_chat_v4';
     const SETTINGS_KEY = 'hanza_settings_v1';
+    const TITLE_KEY = 'hanza_title_v1';
+
     const saved = localStorage.getItem(CHAT_KEY);
     if (saved) chatMessages.innerHTML = saved;
     const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
     toneSel.value   = savedSettings.tone   || 'balanced';
     lengthSel.value = savedSettings.length || 'concise';
+
+    // Restore session title
+    const savedTitle = localStorage.getItem(TITLE_KEY) || 'Untitled Session';
+    setSessionTitle(savedTitle);
+
     function saveChat(){ localStorage.setItem(CHAT_KEY, chatMessages.innerHTML); }
     function saveSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify({ tone: toneSel.value, length: lengthSel.value })); }
     toneSel.addEventListener('change', saveSettings);
     lengthSel.addEventListener('change', saveSettings);
 
-    // Helpers
     function showToast(msg, ms=1400){ toast.textContent = msg; toast.classList.add('show'); setTimeout(()=> toast.classList.remove('show'), ms); }
     messageInput.addEventListener('input', () => {
       messageInput.style.height = 'auto';
       messageInput.style.height = Math.min(messageInput.scrollHeight, 160) + 'px';
+      maybeShowSlashMenu();
     });
 
     // Markdown renderer (simple)
@@ -379,6 +422,44 @@
         pre.appendChild(btn);
       });
     }
+
+    // Utility: add reactions row
+    function addReactions(bubble){
+      const bar = document.createElement('div');
+      bar.className = 'reactions';
+      ['👍','👏','🔥','💡'].forEach(emoji=>{
+        const b = document.createElement('button'); b.textContent = emoji;
+        b.addEventListener('click', ()=> showToast(`Reacted ${emoji}`));
+        bar.appendChild(b);
+      });
+      bubble.appendChild(bar);
+    }
+
+    // Utility: bubble action buttons
+    function addBubbleActions(row, isUser){
+      const bar = document.createElement('div');
+      bar.className = 'bubble-actions';
+      if (isUser){
+        const edit = document.createElement('button'); edit.textContent = '✏️ Edit & Resend';
+        edit.addEventListener('click', ()=>{
+          const text = row.querySelector('.message-content').innerText;
+          messageInput.value = text;
+          messageInput.focus();
+          row.remove(); saveChat();
+        });
+        bar.appendChild(edit);
+      }else{
+        const regen = document.createElement('button'); regen.textContent = '🔄 Regenerate';
+        regen.addEventListener('click', ()=> {
+          if (lastUserPrompt) sendWithPrompt(lastUserPrompt, true);
+        });
+        const cont = document.createElement('button'); cont.textContent = '➡️ Continue';
+        cont.addEventListener('click', ()=> sendWithPrompt('Continue.', false));
+        bar.appendChild(regen); bar.appendChild(cont);
+      }
+      row.appendChild(bar);
+    }
+
     function addMessage(content, isUser=false, isHtml=false){
       const row = document.createElement('div');
       row.className = `message ${isUser?'user':'bot'}`;
@@ -386,26 +467,35 @@
       bubble.className = 'message-content';
       if (isHtml) bubble.innerHTML = content; else bubble.textContent = content;
 
-      if (!isUser) {
-        const btn = document.createElement('button');
-        btn.className = 'copy'; btn.textContent = 'Copy';
-        btn.addEventListener('click', async ()=>{
+      // Copy button ONLY for bot messages
+      if (!isUser){
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy'; copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', async ()=>{
           const raw = bubble.innerText;
-          try { await navigator.clipboard.writeText(raw); btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',1200); }
-          catch { btn.textContent='Failed'; setTimeout(()=>btn.textContent='Copy',1200); }
+          try { await navigator.clipboard.writeText(raw); copyBtn.textContent='Copied!'; setTimeout(()=>copyBtn.textContent='Copy',1200); }
+          catch { copyBtn.textContent='Failed'; setTimeout(()=>copyBtn.textContent='Copy',1200); }
         });
-        bubble.appendChild(btn);
+        bubble.appendChild(copyBtn);
       }
+
       row.appendChild(bubble);
       chatMessages.appendChild(row);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      saveChat();
+
+      // Actions + reactions
+      addBubbleActions(row, isUser);
+      if (!isUser) addReactions(bubble);
+
       if (!isUser) decorateCodeCopies(bubble);
+
+      if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
+      saveChat();
       return bubble;
     }
 
     // STREAM + typing dots + stop
     let currentES = null;
+    let lastUserPrompt = '';
     async function streamBotResponse(userMessage, opts, targetBubble){
       return new Promise((resolve)=>{
         const q = new URLSearchParams({ message:userMessage, tone:opts.tone, length:opts.length });
@@ -425,7 +515,7 @@
           if (!buffer) return; // keep dots
           targetBubble.innerHTML = renderMarkdown(buffer);
           decorateCodeCopies(targetBubble);
-          chatMessages.scrollTop = chatMessages.scrollHeight;
+          if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
           saveChat();
           raf = false;
         };
@@ -448,22 +538,115 @@
 
     function currentOptions(){ return { tone: toneSel.value, length: lengthSel.value }; }
 
-    async function handleSend(){
-      const msg = messageInput.value.trim(); if (!msg) return;
-      addMessage(msg, true);
+    // Auto-title helpers
+    function setSessionTitle(txt){
+      sessionTitle.firstChild.nodeValue = txt + ' ';
+      localStorage.setItem(TITLE_KEY, txt);
+    }
+    function maybeAutoTitleFrom(msg){
+      const existing = (sessionTitle.textContent || '').replace('Rename','').trim();
+      if (!existing || existing === 'Untitled Session'){
+        const first = (msg.split('\n').find(Boolean) || '').slice(0, 60);
+        if (first) setSessionTitle(first);
+      }
+    }
+    editTitleBtn.addEventListener('click', ()=>{
+      sessionTitle.setAttribute('contenteditable','true');
+      const range = document.createRange(); const sel = window.getSelection();
+      range.selectNodeContents(sessionTitle.childNodes[0]); sel.removeAllRanges(); sel.addRange(range);
+      sessionTitle.focus();
+    });
+    sessionTitle.addEventListener('blur', ()=>{
+      sessionTitle.removeAttribute('contenteditable');
+      const raw = sessionTitle.textContent.replace('Rename','').trim() || 'Untitled Session';
+      setSessionTitle(raw);
+    });
+    sessionTitle.addEventListener('keydown', (e)=>{
+      if (e.key==='Enter'){ e.preventDefault(); sessionTitle.blur(); }
+    });
+
+    // Slash command presets
+    const presets = {
+      '/outline': 'Create a blog post outline with H1/H2, bullet points, and a crisp CTA at the end.',
+      '/seo': 'Draft an SEO brief: target keywords, search intent, title ideas, meta description, H2s, and internal link suggestions.',
+      '/tweet': 'Turn this idea into a 7-tweet thread with hooks and skimmable bullets.',
+      '/hooks': 'Give me 10 punchy opening hooks tailored to my audience.',
+      '/cta': 'Propose 5 call-to-action options that feel natural and value-led.'
+    };
+    function maybeShowSlashMenu(){
+      const val = messageInput.value.trim();
+      if (!val.startsWith('/')){ slashMenu.style.display='none'; return; }
+      const items = Object.entries(presets)
+        .filter(([k])=> k.startsWith(val))
+        .slice(0,5)
+        .map(([k,v])=> `<div class="item" data-key="${k}"><strong>${k}</strong> — <span style="opacity:.8">${v}</span></div>`)
+        .join('');
+      if (!items){ slashMenu.style.display='none'; return; }
+      slashMenu.innerHTML = items;
+      slashMenu.style.display = 'block';
+      const rect = messageInput.getBoundingClientRect();
+      const host = document.querySelector('.chat-input-container').getBoundingClientRect();
+      slashMenu.style.left = (rect.left - host.left + 16) + 'px';
+    }
+    slashMenu.addEventListener('click', (e)=>{
+      const item = e.target.closest('.item'); if (!item) return;
+      const key = item.getAttribute('data-key'); messageInput.value = presets[key];
+      slashMenu.style.display='none'; messageInput.focus();
+    });
+    messageInput.addEventListener('keydown', (e)=>{
+      if (e.key === 'Tab'){
+        const key = messageInput.value.trim();
+        if (presets[key]){ e.preventDefault(); messageInput.value = presets[key]; slashMenu.style.display='none'; }
+      }
+      if (e.key === 'Escape'){ slashMenu.style.display='none'; }
+    });
+
+    // Auto-scroll lock
+    let autoScroll = true;
+    function atBottom(){
+      return chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 8;
+    }
+    chatMessages.addEventListener('scroll', ()=>{
+      autoScroll = atBottom();
+      toLatestBtn.style.display = autoScroll ? 'none' : 'block';
+    });
+    toLatestBtn.addEventListener('click', ()=>{
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      autoScroll = true; toLatestBtn.style.display='none';
+    });
+
+    async function sendWithPrompt(prompt){
+      if (!prompt.trim()) return;
+      addMessage(prompt, true);
+      maybeAutoTitleFrom(prompt);
       messageInput.value=''; messageInput.style.height='auto';
       sendButton.disabled = true;
 
+      lastUserPrompt = prompt;
+
       const botBubble = addMessage('', false, true);
-      await streamBotResponse(msg, currentOptions(), botBubble);
+      await streamBotResponse(prompt, currentOptions(), botBubble);
 
       sendButton.disabled = false;
+    }
+
+    async function handleSend(){
+      await sendWithPrompt(messageInput.value);
     }
 
     sendButton.addEventListener('click', handleSend);
     messageInput.addEventListener('keypress', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); } });
 
-    // ------- History drawer (Open / Download / Delete / Jump Back In) -------
+    /* ---------------- History drawer (Open / Download / Delete / Jump Back In) + Search ---------------- */
+
+    // NEW: pretty display name from file name
+    function displayNameFromFile(name = '') {
+      const noExt = name.replace(/\.(pdf|md|json)$/i, '');
+      const noStamp = noExt.replace(/(?:__|_)\d{4}-\d{2}-\d{2}(?:T\d{2}-\d{2}-\d{2}(?:-\d+Z)?)?$/,'');
+      const pretty = noStamp.replace(/[-_]+/g, ' ').trim();
+      return pretty || 'Untitled';
+    }
+
     async function loadHistory(){
       historyList.innerHTML = '<div class="meta" style="padding:12px;">Loading…</div>';
       try{
@@ -473,11 +656,14 @@
         historyList.innerHTML = '';
         data.files.forEach(f=>{
           const row = document.createElement('div'); row.className = 'file';
+          const niceName = displayNameFromFile(f.name || '');
+          row.dataset.name = niceName.toLowerCase(); // for search
+
           const when = new Date(f.mtime).toLocaleString();
           const sizeKB = Math.max(1, Math.round(f.size/1024));
           row.innerHTML = `
             <div class="meta">
-              <div><strong>${f.name}</strong></div>
+              <div><strong>${niceName}</strong></div>
               <div style="font-size:12px; color:#667;">${when} • ${sizeKB} KB</div>
             </div>
             <div class="actions">
@@ -486,25 +672,26 @@
               ${f.jsonUrl ? '<button data-jump>Jump Back In</button>' : ''}
               <button data-del style="border-color:#f3c2c2;background:#fff0f0;">Delete</button>
             </div>`;
+
+          // actions keep the real file/url
           row.querySelector('[data-open]').addEventListener('click', ()=> window.open(f.url, '_blank'));
           row.querySelector('[data-dl]').addEventListener('click', ()=>{
             const a = document.createElement('a'); a.href = f.url; a.download = f.name; a.click();
           });
           if (f.jsonUrl) {
-            row.querySelector('[data-jump]').addEventListener('click', async ()=>{
+            row.querySelector('[data-jump]')?.addEventListener('click', async ()=>{
               try{
                 const jr = await fetch(f.jsonUrl);
                 const j = await jr.json();
                 if (!Array.isArray(j.transcript)) throw new Error();
-                // rebuild UI from transcript
                 chatMessages.innerHTML = '';
                 j.transcript.forEach(turn=>{
                   const isUser = turn.role === 'user';
                   const content = turn.text || '';
                   addMessage(content, isUser, false);
                 });
+                setSessionTitle(niceName);
                 showToast('Conversation loaded.');
-                // close drawer + focus
                 closeDrawer(); messageInput.focus();
               }catch{
                 showToast('Could not load conversation.');
@@ -522,17 +709,26 @@
           });
           historyList.appendChild(row);
         });
+        applyHistoryFilter();
       }catch{
         historyList.innerHTML = '<div class="meta" style="padding:12px;">Failed to load history.</div>';
       }
+    }
+    function applyHistoryFilter(){
+      const q = (historySearch.value || '').toLowerCase().trim();
+      historyList.querySelectorAll('.file').forEach(row=>{
+        const name = row.dataset.name || '';
+        row.style.display = (!q || name.includes(q)) ? '' : 'none';
+      });
     }
     function openDrawer(){ drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false'); loadHistory(); }
     function closeDrawer(){ drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); }
     historyBtn.addEventListener('click', openDrawer);
     closeBtn.addEventListener('click', closeDrawer);
     refreshBtn.addEventListener('click', loadHistory);
+    historySearch.addEventListener('input', applyHistoryFilter);
 
-    // ------- Name + Save (PDF on server) -------
+    /* ---------------- Name + Save (PDF on server) ---------------- */
     function slugifyName(s=''){
       return s
         .toLowerCase()
@@ -546,6 +742,8 @@
       return (el?.innerText || '').split('\n').find(Boolean) || '';
     }
     function defaultTitle(){
+      const title = (sessionTitle.textContent || '').replace('Rename','').trim();
+      if (title && title !== 'Untitled Session') return title;
       const base = firstUserLine().slice(0,60) || 'hanza_session';
       const stamp = new Date().toISOString().slice(0,16).replace('T','_').replace(/:/g,'-');
       return `${slugifyName(base)}_${stamp}`;
@@ -597,12 +795,19 @@
         <div class="message bot">
           <div class="message-content">
             👋 New session. Tell me the topic, pick <strong>Tone</strong> and <strong>Length</strong>, and I'll draft in your voice.
-            <div class="note">Tip: Enter to send, Shift+Enter for a new line.</div>
+            <div class="note">Tip: Enter to send, Shift+Enter for a new line. Type <code>/</code> for quick presets.</div>
           </div>
         </div>
       `;
+      setSessionTitle('Untitled Session');
       saveChat(); showToast('New chat started'); messageInput.focus();
     });
+
+    // Helpers: title
+    function setSessionTitle(txt){
+      sessionTitle.firstChild.nodeValue = txt + ' ';
+      localStorage.setItem(TITLE_KEY, txt);
+    }
 
     // Focus input on load
     messageInput.focus();
