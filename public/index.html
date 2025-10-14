@@ -6,13 +6,17 @@
   <title>Hanza Bot - Blog Writing Assistant</title>
   <style>
     :root{
-      --brand1:#95c59c; --brand2:#000501; --user1:#84a585; --user2:#467c4b;
-      --bg:#faf6f4; --white:#fff; --border:#e2e8f0; --ink:#222;
+      --brand1:#9f9481; --brand2:#9f9481; --user1:#859f81; --user2:#859f81;
+      --bg:#314631;      /* chat panel background (very light mint) */
+      --white:#fff; --border:#e2e8f0; --ink:#222; --muted:#666;
+      --code-bg:#f6f6f6; --code-bd:#eee; --toast-bg:#111; --toast-fg:#fff;
     }
     *{box-sizing:border-box}
     body{
-      margin:0; font-family:'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--ink);
-      background: linear-gradient(135deg, #f3f3ee 0%, #faf6f4 100%);
+      margin:0;
+      font-family:'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color:var(--ink);
+      background:#ecf0ca; /* single light green page background */
       display:flex; justify-content:center; align-items:center; height:100vh;
     }
     .chat-container{
@@ -21,36 +25,72 @@
       box-shadow: 0 25px 50px rgba(0,0,0,0.15);
       display:flex; flex-direction:column; overflow:hidden;
     }
+
+    /* Header */
     .chat-header{
       background: linear-gradient(135deg, var(--brand1) 0%, var(--brand2) 100%);
-      color:white; padding:24px; font-size:20px; font-weight:700;
+      color:white; padding:12px 16px; font-size:18px; font-weight:700;
       display:flex; align-items:center; justify-content:space-between; gap:12px;
+      border-bottom:1px solid rgba(255,255,255,.18);
     }
-    .actions{display:flex; gap:8px; align-items:center}
+
+    /* Brand block: avatar above name */
+    .brand{
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:6px; min-width:100px;
+    }
+    .avatar{
+      width:72px; height:72px; border-radius:50%;
+      object-fit:cover; object-position:center;
+      border:2px solid rgba(255,255,255,.7);
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      background:#ddd;
+    }
+    .brand-name{ font-size:16px; font-weight:700; letter-spacing:.2px; }
+
+    .toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .control{
+      display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.12);
+      padding:6px 10px; border-radius:10px; font-size:13px; backdrop-filter: blur(4px);
+    }
+    .control label{opacity:.9}
+    .control select{
+      background:transparent; color:#fff; border:1px solid rgba(255,255,255,.5);
+      padding:4px 6px; border-radius:8px; font-weight:600; font-size:12px;
+      appearance:none; outline:none;
+    }
+    .control option{color:#000}
     .btn{
       border:1.5px solid rgba(255,255,255,.6); color:white; background:transparent;
       padding:8px 12px; border-radius:12px; cursor:pointer; font-weight:600; font-size:13px;
     }
-    .btn:hover{background:rgba(255,255,255,.12)}
-    .chat-messages{
-      flex:1; padding:24px; overflow-y:auto; background:var(--bg);
-    }
+    .btn:hover{background:rgba(236, 162, 162, 0.932)}
+    .btn.stop{border-color:#ffb3b3; color:#fff; background:rgba(255, 0, 179, 0.15)}
+    .btn.stop[disabled]{opacity:.5; cursor:not-allowed}
+
+    .chat-messages{flex:1; padding:24px; overflow-y:auto; background:var(--bg);}
     .message{margin-bottom:20px; display:flex;}
     .message.user{justify-content:flex-end;}
     .message-content{
+      position:relative;
       max-width:75%; padding:12px 16px; border-radius:18px; font-size:15px; line-height:1.55;
       border:1px solid transparent; white-space:normal; word-wrap:break-word;
     }
     .message.user .message-content{
-      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%); color:white;
+      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%);
+      color:white; box-shadow: 0 2px 10px rgba(0,0,0,.06); border: 1px solid rgba(0,0,0,.05);
     }
-    .message.bot .message-content{
-      background:var(--white); border-color:var(--border);
+    .message.bot .message-content{background:var(--white); border-color:var(--border);}
+
+    .copy{
+      position:absolute; top:8px; right:8px; border:none; background:#f3f3ee; color:#333;
+      padding:4px 8px; border-radius:10px; font-size:12px; cursor:pointer;
     }
+    .copy:hover{background:#e9e7e2}
+
     .chat-input-container{
-      padding:16px 24px; background:var(--white); border-top:1px solid var(--border);
-      display:flex; gap:12px; align-items:flex-end;
-      position:relative;
+      padding:16px 16px; background:var(--white); border-top:1px solid var(--border);
+      display:flex; gap:12px; align-items:flex-end; position:relative;
     }
     .chat-input{
       flex:1; padding:14px 20px; border:2px solid var(--border); border-radius:24px;
@@ -61,33 +101,85 @@
       padding:14px 20px; font-weight:700; cursor:pointer; min-width:110px;
     }
     .send-button[disabled]{opacity:.6; cursor:not-allowed}
-    .note{margin-top:4px; font-size:12px; opacity:.7;}
-    /* Markdown prettify inside bot messages */
+    .note{margin-top:4px; font-size:12px; color:var(--muted);}
+
+    /* Markdown prettify */
     .message.bot .message-content h1,.message.bot .message-content h2,.message.bot .message-content h3{margin:6px 0 8px}
     .message.bot .message-content h1{font-size:20px}
     .message.bot .message-content h2{font-size:18px}
     .message.bot .message-content h3{font-size:16px}
-    .message.bot .message-content ul{margin:6px 0 6px 20px}
-    .message.bot .message-content ol{margin:6px 0 6px 20px}
+    .message.bot .message-content ul,.message.bot .message-content ol{margin:6px 0 6px 20px}
     .message.bot .message-content p{margin:6px 0}
     .message.bot .message-content code{
-      background:#f6f6f6; border:1px solid #eee; padding:0 4px; border-radius:4px;
+      background:var(--code-bg); border:1px solid var(--code-bd); padding:0 4px; border-radius:4px;
       font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
+    .message.bot .message-content pre{
+      background:var(--code-bg); border:1px solid var(--code-bd);
+      padding:10px; border-radius:10px; overflow:auto; margin:8px 0; position:relative;
+    }
+    .message.bot .message-content pre .code-copy{
+      position:absolute; top:8px; right:8px; font-size:12px; padding:4px 8px; border-radius:8px;
+      border:1px solid #ddd; background:#fff; cursor:pointer;
+    }
+    .message.bot .message-content pre .code-copy:hover{background:#f6f6f6}
+
+    /* Toast */
+    .toast{
+      position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
+      background:var(--toast-bg); color:var(--toast-fg); padding:10px 14px; border-radius:10px;
+      font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s ease;
+    }
+    .toast.show{opacity:.95}
+
     /* Mobile */
+    @media (max-width:700px){
+      .chat-header{ flex-direction:column; align-items:stretch; gap:10px; }
+      .toolbar{ justify-content:center; }
+      .brand{ min-width:auto; }
+    }
     @media (max-width:600px){
       .chat-container{width:100%; height:100%; border-radius:0;}
       .chat-input-container{position:sticky; bottom:0;}
       .send-button{min-width:auto}
+      .message-content{max-width:90%}
     }
   </style>
 </head>
 <body>
   <div class="chat-container">
     <div class="chat-header">
-      📝 Hanza Bot
-      <div class="actions">
+      <div class="brand">
+        <img class="avatar" id="avatar" src="/assets/hanza.jpg?v=1" alt="Hanza Stephens" />
+        <span class="brand-name">Hanza Bot</span>
+      </div>
+
+      <div class="toolbar">
+        <div class="control">
+          <label for="tone">Tone</label>
+          <select id="tone">
+            <option value="balanced">Balanced</option>
+            <option value="formal">Formal</option>
+            <option value="casual">Casual</option>
+            <option value="bold">Bold</option>
+            <option value="friendly">Friendly</option>
+            <option value="authoritative">Authoritative</option>
+            <option value="storytelling">Storytelling</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="length">Length</label>
+          <select id="length">
+            <option value="concise">Concise (~600w)</option>
+            <option value="standard">Standard (~900w)</option>
+            <option value="detailed">Detailed (1200–1500w)</option>
+            <option value="ultra">Ultra (2000w+)</option>
+          </select>
+        </div>
+        <!-- Stream toggle removed; streaming is always on -->
+        <button class="btn" id="newBtn"  title="Start a new chat">New Chat</button>
         <button class="btn" id="exportBtn" title="Export chat as .md">Export .md</button>
+        <button class="btn stop" id="stopBtn" title="Stop streaming" disabled>Stop</button>
       </div>
     </div>
 
@@ -95,27 +187,74 @@
       <div class="message bot">
         <div class="message-content">
           👋 Hi Hanza! I'm your AI assistant for writing blog posts in your voice and style.
-          Ask me to create full posts, brainstorm topics, or polish drafts.
-          <div class="note">Tip: press Enter to send, Shift+Enter for a new line.</div>
+          Choose a <strong>Tone</strong> and <strong>Length</strong>, then ask me to create, brainstorm, or polish a post.
+          <div class="note">Tip: Enter to send, Shift+Enter for a new line.</div>
         </div>
       </div>
     </div>
 
     <div class="chat-input-container">
-      <textarea class="chat-input" id="messageInput" placeholder="Write a blog post about leadership..." rows="1"></textarea>
+      <textarea class="chat-input" id="messageInput" placeholder="Write a blog post about leadership during change..." rows="1"></textarea>
       <button class="send-button" id="sendButton">Send 📤</button>
     </div>
   </div>
 
+  <div class="toast" id="toast"></div>
+
   <script>
     const chatMessages = document.getElementById('chatMessages');
     const messageInput = document.getElementById('messageInput');
-    const sendButton = document.getElementById('sendButton');
-    const exportBtn = document.getElementById('exportBtn');
+    const sendButton   = document.getElementById('sendButton');
+    const exportBtn    = document.getElementById('exportBtn');
+    const newBtn       = document.getElementById('newBtn');
+    const stopBtn      = document.getElementById('stopBtn');
+    const toneSel      = document.getElementById('tone');
+    const lengthSel    = document.getElementById('length');
+    const toast        = document.getElementById('toast');
+    const avatar       = document.getElementById('avatar');
 
-    // Restore saved chat on load
-    const saved = localStorage.getItem('hanza_chat_v1');
+    // Avatar graceful fallback to initials if the image fails
+    avatar.addEventListener('error', () => {
+      const badge = document.createElement('div');
+      badge.textContent = 'HS';
+      badge.setAttribute('aria-label','Hanza Stephens');
+      Object.assign(badge.style, {
+        width:'72px', height:'72px', borderRadius:'50%', display:'grid', placeItems:'center',
+        background:'rgba(255,255,255,.2)', color:'#fff',
+        border:'2px solid rgba(255,255,255,.7)', boxShadow:'0 2px 8px rgba(0,0,0,.15)',
+        fontWeight:'700'
+      });
+      avatar.replaceWith(badge);
+    });
+
+    // ---- Persistence for chat + settings ----
+    const CHAT_KEY = 'hanza_chat_v4';
+    const SETTINGS_KEY = 'hanza_settings_v1';
+
+    // Restore chat
+    const saved = localStorage.getItem(CHAT_KEY);
     if (saved) chatMessages.innerHTML = saved;
+
+    // Restore settings (no 'stream' anymore)
+    const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    toneSel.value   = savedSettings.tone   || 'balanced';
+    lengthSel.value = savedSettings.length || 'concise';
+
+    function saveChat(){ localStorage.setItem(CHAT_KEY, chatMessages.innerHTML); }
+    function saveSettings(){
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+        tone: toneSel.value, length: lengthSel.value
+      }));
+    }
+    toneSel.addEventListener('change', saveSettings);
+    lengthSel.addEventListener('change', saveSettings);
+
+    // ---- Small helpers ----
+    function showToast(msg, ms=1400){
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(()=> toast.classList.remove('show'), ms);
+    }
 
     // Auto-resize textarea
     messageInput.addEventListener('input', () => {
@@ -123,140 +262,191 @@
       messageInput.style.height = Math.min(messageInput.scrollHeight, 160) + 'px';
     });
 
-    function saveChat() {
-      localStorage.setItem('hanza_chat_v1', chatMessages.innerHTML);
-    }
-
-    // Minimal Markdown renderer (safe-ish)
-    function renderMarkdown(mdText = '') {
-      // escape HTML
-      const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    // Markdown renderer (with code blocks)
+    function renderMarkdown(mdText=''){
+      const esc = s => s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
       let s = esc(mdText);
+
+      // fenced code blocks ``` ... ```
+      s = s.replace(/```([\s\S]*?)```/g, (m, code)=>`<pre><code>${code.replace(/^\n+|\n+$/g,'')}</code></pre>`);
 
       // headings
       s = s.replace(/^### (.*)$/gm, '<h3>$1</h3>');
       s = s.replace(/^## (.*)$/gm, '<h2>$1</h2>');
       s = s.replace(/^# (.*)$/gm, '<h1>$1</h1>');
 
-      // bold/italic
+      // bold / italic
       s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
       s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
       // lists
       s = s.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>');
       s = s.replace(/^\s*\d+\.\s+(.*)$/gm, '<li>$1</li>');
-      s = s.replace(/(?:<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`);
+      s = s.replace(/(?:<li>.*<\/li>\n?)+/g, m=>`<ul>${m}</ul>`);
+
+      // inline code
+      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
 
       // paragraphs (don’t wrap block tags)
-      s = s.replace(/(^|\n)([^\n<][^\n]*)/g, (m, a, b) => {
-        if (/^\s*<(h\d|ul|li|\/ul)/.test(b)) return m;
+      s = s.replace(/(^|\n)([^\n<][^\n]*)/g, (m,a,b)=>{
+        if (/^\s*<(h\d|ul|li|\/ul|pre|code)/.test(b)) return m;
         return `${a}<p>${b}</p>`;
       });
-
       return s;
     }
 
-    function addMessage(content, isUser = false, isHtml = false) {
-      const message = document.createElement('div');
-      message.classList.add('message', isUser ? 'user' : 'bot');
-      const contentDiv = document.createElement('div');
-      contentDiv.classList.add('message-content');
-
-      if (isHtml) contentDiv.innerHTML = content;
-      else contentDiv.textContent = content;
-
-      message.appendChild(contentDiv);
-      chatMessages.appendChild(message);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      saveChat();
-    }
-
-    function showTypingIndicator() {
-      const typing = document.createElement('div');
-      typing.classList.add('message', 'bot', 'typing');
-      typing.innerHTML = `<div class="message-content">Hanza is typing...</div>`;
-      chatMessages.appendChild(typing);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      return typing;
-    }
-
-    function removeTypingIndicator() {
-      const typing = document.querySelector('.message.typing');
-      if (typing) typing.remove();
-      saveChat();
-    }
-
-    async function getBotResponse(userMessage) {
-      try {
-        const response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: userMessage })
+    // Add copy buttons to <pre> code blocks
+    function decorateCodeCopies(container){
+      container.querySelectorAll('pre').forEach(pre=>{
+        if (pre.querySelector('.code-copy')) return;
+        const btn = document.createElement('button');
+        btn.className = 'code-copy';
+        btn.textContent = 'Copy';
+        btn.addEventListener('click', async ()=>{
+          const code = pre.querySelector('code')?.innerText || '';
+          try { await navigator.clipboard.writeText(code); btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',1200); }
+          catch { btn.textContent='Failed'; setTimeout(()=>btn.textContent='Copy',1200); }
         });
-
-        // In case server returns non-JSON (proxy/network issue)
-        const data = await response.json().catch(() => ({}));
-
-        if (data && typeof data.reply === 'string' && data.reply.trim()) {
-          return data.reply;
-        }
-
-        if (!response.ok) {
-          if (response.status === 429) {
-            return "⚠️ Your AI quota is out. Add billing to your OpenAI project, or enable DEMO_MODE on the server.";
-          }
-          return "⚠️ The AI service returned an error. Please try again.";
-        }
-
-        return "⚠️ No reply from server.";
-      } catch (error) {
-        return "⚠️ Error reaching the AI. Please try again.";
-      }
+        pre.appendChild(btn);
+      });
     }
 
-    async function handleSend() {
-      const userMessage = messageInput.value.trim();
-      if (!userMessage) return;
+    function addMessage(content, isUser=false, isHtml=false){
+      const row = document.createElement('div');
+      row.className = `message ${isUser?'user':'bot'}`;
+      const bubble = document.createElement('div');
+      bubble.className = 'message-content';
+      if (isHtml) bubble.innerHTML = content; else bubble.textContent = content;
 
-      addMessage(userMessage, true);
-      messageInput.value = '';
-      messageInput.style.height = 'auto';
+      // Copy entire bubble for bot
+      if (!isUser) {
+        const btn = document.createElement('button');
+        btn.className = 'copy';
+        btn.textContent = 'Copy';
+        btn.addEventListener('click', async ()=>{
+          const raw = bubble.innerText;
+          try { await navigator.clipboard.writeText(raw); btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',1200); }
+          catch { btn.textContent='Failed'; setTimeout(()=>btn.textContent='Copy',1200); }
+        });
+        bubble.appendChild(btn);
+      }
 
-      // prevent double send while waiting
+      row.appendChild(bubble);
+      chatMessages.appendChild(row);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      saveChat();
+
+      if (!isUser) decorateCodeCopies(bubble);
+      return bubble; // for streaming
+    }
+
+    // Typing indicator (we immediately switch to a real bubble for streaming)
+    function showTyping(){
+      const t = document.createElement('div');
+      t.className = 'message bot typing';
+      t.innerHTML = `<div class="message-content">Hanza is typing…</div>`;
+      chatMessages.appendChild(t);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return t;
+    }
+    function removeTyping(){ const t = document.querySelector('.message.typing'); if (t) t.remove(); saveChat(); }
+
+    // Streaming via SSE + Stop support (always on)
+    let currentES = null;
+    async function streamBotResponse(userMessage, opts, targetBubble){
+      return new Promise((resolve)=>{
+        const q = new URLSearchParams({ message:userMessage, tone:opts.tone, length:opts.length });
+        const es = new EventSource(`/api/stream?${q.toString()}`);
+        currentES = es;
+        stopBtn.disabled = false;
+
+        let buffer = '';
+        let raf = false;
+
+        const flush = ()=>{
+          targetBubble.innerHTML = renderMarkdown(buffer);
+          decorateCodeCopies(targetBubble);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+          saveChat();
+          raf = false;
+        };
+
+        es.onmessage = (e)=>{
+          if (e.data === '[DONE]'){
+            es.close(); currentES = null; stopBtn.disabled = true;
+            if (!raf) flush(); resolve(); return;
+          }
+          buffer += e.data;
+          if (!raf){ raf = true; requestAnimationFrame(flush); }
+        };
+
+        es.onerror = ()=>{
+          es.close(); currentES = null; stopBtn.disabled = true;
+          if (!buffer){
+            targetBubble.textContent = "⚠️ Streaming failed. Try again.";
+            saveChat();
+          }
+          resolve();
+        };
+      });
+    }
+    stopBtn.addEventListener('click', ()=>{
+      if (currentES){ currentES.close(); currentES = null; stopBtn.disabled = true; showToast('Stopped'); }
+    });
+
+    function currentOptions(){ return { tone: toneSel.value, length: lengthSel.value }; }
+
+    async function handleSend(){
+      const msg = messageInput.value.trim();
+      if (!msg) return;
+
+      addMessage(msg, true);
+      messageInput.value=''; messageInput.style.height='auto';
       sendButton.disabled = true;
 
-      const typingNode = showTypingIndicator();
-      const reply = await getBotResponse(userMessage);
-      removeTypingIndicator(typingNode);
+      showTyping();
+      removeTyping(); // create the bot bubble immediately for streaming
+      const botBubble = addMessage('', false, true);
 
-      // Render bot reply as Markdown -> HTML
-      const html = renderMarkdown(reply);
-      addMessage(html, false, true);
+      const opts = currentOptions();
+      await streamBotResponse(msg, opts, botBubble);
 
       sendButton.disabled = false;
     }
 
     sendButton.addEventListener('click', handleSend);
-    messageInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
+    messageInput.addEventListener('keypress', (e)=>{
+      if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
     });
 
     // Export chat as Markdown
-    exportBtn.addEventListener('click', () => {
-      const parts = Array.from(document.querySelectorAll('.message')).map(m => {
+    exportBtn.addEventListener('click', ()=>{
+      const parts = Array.from(document.querySelectorAll('.message')).map(m=>{
         const isUser = m.classList.contains('user');
-        // remove note text in the very first bubble if present
         const raw = m.querySelector('.message-content').innerText.replace(/\s*Tip:.*$/,'').trim();
         return `${isUser ? 'You' : 'Hanza'}:\n${raw}\n`;
       }).join('\n---\n\n');
       const blob = new Blob([parts], {type:'text/markdown;charset=utf-8'});
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'hanza_session.md'; a.click();
+      const a = document.createElement('a'); a.href = url; a.download = 'hanza_session.md'; a.click();
       URL.revokeObjectURL(url);
+      showToast('Exported as Markdown');
+    });
+
+    // New Chat
+    newBtn.addEventListener('click', ()=>{
+      if (currentES){ currentES.close(); currentES = null; stopBtn.disabled = true; }
+      chatMessages.innerHTML = `
+        <div class="message bot">
+          <div class="message-content">
+            👋 New session. Tell me the topic, pick <strong>Tone</strong> and <strong>Length</strong>, and I'll draft in your voice.
+            <div class="note">Tip: Enter to send, Shift+Enter for a new line.</div>
+          </div>
+        </div>
+      `;
+      saveChat();
+      showToast('New chat started');
+      messageInput.focus();
     });
 
     // Focus input on load
