@@ -32,7 +32,7 @@ fs.mkdirSync(TRANSCRIPTS, { recursive: true });
 
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(PUBLIC_DIR));
-app.use("/transcripts", express.static(TRANSCRIPTS)); // serve PDFs
+app.use("/transcripts", express.static(TRANSCRIPTS)); // serve PDFs + JSON
 
 // ---- Load style guide once (with a safe cap)
 let STYLE_GUIDE = "";
@@ -78,9 +78,7 @@ function sseHeaders() {
     "X-Accel-Buffering": "no"
   };
 }
-
 function escapeSSE(s = "") { return s.replace(/\u0000/g, ""); }
-
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 function capitalize(s) { return (s || "").charAt(0).toUpperCase() + (s || "").slice(1); }
 
@@ -150,10 +148,7 @@ async function embedText(text) {
   return data.data[0].embedding;
 }
 
-/**
- * Retrieve topK similar chunks from index.
- * token/char budget: trims content so we don't overflow context.
- */
+/** Retrieve topK similar chunks from index. */
 async function retrieveSimilar(query, { topK = 4, maxCharsTotal = 3000 } = {}) {
   if (!RAG_INDEX?.records?.length) return [];
 
@@ -163,7 +158,6 @@ async function retrieveSimilar(query, { topK = 4, maxCharsTotal = 3000 } = {}) {
     score: cosineSim(qVec, r.embedding)
   })).sort((a,b) => b.score - a.score);
 
-  // accumulate up to maxCharsTotal
   const results = [];
   let used = 0;
   for (const rec of scored) {
@@ -198,7 +192,6 @@ function buildMessages(userPrompt, tone, length, retrieved = []) {
     "Format with clean markdown: use H1/H2/H3 headings, bullets, numbered steps, and code fences for templates where helpful. " +
     "Avoid emojis unless the user asks. Keep advice concrete and de-jargonized.";
 
-  // Build a compact “Reference Excerpts” block
   let refs = "";
   if (retrieved?.length) {
     const blocks = retrieved.map((r, i) =>
@@ -240,7 +233,7 @@ app.post("/admin/reload-index", (_req, res) => {
   }
 });
 
-// ====== Non-stream (UI always streams, but keep this) ======
+// ====== Non-stream (fallback) ======
 app.post("/api/chat", async (req, res) => {
   try {
     const { message, tone = "balanced", length = "standard" } = req.body || {};
@@ -248,7 +241,6 @@ app.post("/api/chat", async (req, res) => {
 
     if (DEMO) return res.json({ reply: demoDraft(message, tone, length) });
 
-    // RAG retrieve
     const retrieved = await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -298,7 +290,6 @@ app.get("/api/stream", async (req, res) => {
 
     if (DEMO) return streamDemoDraft(res, message, tone, length);
 
-    // RAG retrieve
     const retrieved = await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -348,7 +339,7 @@ app.get("/api/stream", async (req, res) => {
         try {
           const json = JSON.parse(data);
           const token = json.choices?.[0]?.delta?.content || "";
-          if (token) res.write(`data: ${escapeSSE(token)}\n\n`);
+          if (token) res.write(`data: ${escapeSSE(token)}n\n`.replace('n\n', '\n\n')); // tiny normalize safeguard
         } catch {
           // ignore keep-alives
         }
@@ -367,7 +358,7 @@ app.get("/api/stream", async (req, res) => {
   }
 });
 
-// ====== Save transcript (PDF or MD) + list/delete (you already have this) ======
+// ====== Save transcript (PDF or MD) + JSON for Jump Back In ======
 app.post("/api/save", async (req, res) => {
   try {
     const { transcript = [], format = "pdf", title = "hanza_session" } = req.body || {};
@@ -376,19 +367,36 @@ app.post("/api/save", async (req, res) => {
     const safe = s => (s || "").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_").slice(0, 60);
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const base  = `${safe(title) || "hanza_session"}__${stamp}`;
-    let outfile;
 
+    // Always write JSON (for Jump Back In)
+    const jsonName = `${base}.json`;
+    const jsonPath = path.join(TRANSCRIPTS, jsonName);
+    const jsonDoc = {
+      title,
+      savedAt: new Date().toISOString(),
+      transcript // [{role, text}]
+    };
+    fs.writeFileSync(jsonPath, JSON.stringify(jsonDoc, null, 2), "utf8");
+
+    // If MD requested, write it; otherwise default to PDF
     if (format === "md") {
-      outfile = path.join(TRANSCRIPTS, `${base}.md`);
+      const mdName = `${base}.md`;
+      const mdPath = path.join(TRANSCRIPTS, mdName);
       const md = transcript.map(t => `${t.role === "user" ? "You" : "Hanza"}:\n${t.text}\n`).join("\n---\n\n");
-      fs.writeFileSync(outfile, md, "utf8");
-      return res.json({ ok:true, file: path.basename(outfile), url: `/transcripts/${path.basename(outfile)}` });
+      fs.writeFileSync(mdPath, md, "utf8");
+      return res.json({
+        ok:true,
+        file: mdName,
+        url: `/transcripts/${encodeURIComponent(mdName)}`,
+        json: `/transcripts/${encodeURIComponent(jsonName)}`
+      });
     }
 
     // PDF
-    outfile = path.join(TRANSCRIPTS, `${base}.pdf`);
+    const pdfName = `${base}.pdf`;
+    const pdfPath = path.join(TRANSCRIPTS, pdfName);
     const doc = new PDFDocument({ margin: 50 });
-    const stream = fs.createWriteStream(outfile);
+    const stream = fs.createWriteStream(pdfPath);
     doc.pipe(stream);
 
     doc.fontSize(18).text(title, { underline: false });
@@ -402,7 +410,12 @@ app.post("/api/save", async (req, res) => {
 
     doc.end();
     stream.on("finish", () => {
-      res.json({ ok:true, file: path.basename(outfile), url: `/transcripts/${path.basename(outfile)}` });
+      res.json({
+        ok:true,
+        file: pdfName,
+        url: `/transcripts/${encodeURIComponent(pdfName)}`,
+        json: `/transcripts/${encodeURIComponent(jsonName)}`
+      });
     });
     stream.on("error", (e) => res.status(500).json({ ok:false, error: String(e) }));
   } catch (e) {
@@ -410,16 +423,21 @@ app.post("/api/save", async (req, res) => {
   }
 });
 
+// ====== List transcripts (include jsonUrl) ======
 app.get("/api/transcripts", async (_req, res) => {
   try {
     const files = fs.readdirSync(TRANSCRIPTS).filter(f => f.endsWith(".pdf") || f.endsWith(".md"));
     const list = files.map(f => {
       const st = fs.statSync(path.join(TRANSCRIPTS, f));
+      const baseNoExt = f.replace(/\.(pdf|md)$/i, "");
+      const jsonName = `${baseNoExt}.json`;
+      const jsonExists = fs.existsSync(path.join(TRANSCRIPTS, jsonName));
       return {
         name: f,
         size: st.size,
         mtime: st.mtime,
-        url: `/transcripts/${encodeURIComponent(f)}`
+        url: `/transcripts/${encodeURIComponent(f)}`,
+        jsonUrl: jsonExists ? `/transcripts/${encodeURIComponent(jsonName)}` : null
       };
     }).sort((a,b)=> b.mtime - a.mtime);
     res.json({ ok:true, files: list });
@@ -428,17 +446,55 @@ app.get("/api/transcripts", async (_req, res) => {
   }
 });
 
+// ====== Delete transcript (also remove matching JSON) ======
 app.delete("/api/transcripts/:file", (req, res) => {
   try {
     const file = req.params.file;
     const target = path.join(TRANSCRIPTS, file);
     if (!fs.existsSync(target)) return res.status(404).json({ ok:false, error:"Not found" });
     fs.unlinkSync(target);
+
+    // Remove matching JSON if it exists
+    const baseNoExt = file.replace(/\.(pdf|md)$/i, "");
+    const jsonPath = path.join(TRANSCRIPTS, `${baseNoExt}.json`);
+    if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath);
+
     res.json({ ok:true });
   } catch (e) {
     res.status(500).json({ ok:false, error: String(e) });
   }
 });
+
+// ---- BEGIN: sources endpoint ----
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+
+app.get('/api/sources', async (req, res) => {
+  try {
+    const dir = path.join(__dirname, 'data', 'sources');
+    const files = (await fs.promises.readdir(dir))
+      .filter(f => /\.(txt|md)$/i.test(f))
+      .sort(); // alphabetical
+
+    const items = await Promise.all(
+      files.map(async (name) => {
+        const text = await fs.promises.readFile(path.join(dir, name), 'utf8');
+        return { name, text };
+      })
+    );
+
+    res.json({ ok: true, items });
+  } catch (err) {
+    console.error('sources error:', err);
+    res.json({ ok: false, items: [] });
+  }
+});
+// ---- END: sources endpoint ----
+
 
 // ====== start ======
 app.listen(PORT, () => {

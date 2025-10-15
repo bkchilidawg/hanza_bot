@@ -7,13 +7,13 @@
   <style>
     :root{
       --brand1:#9f9481; --brand2:#9f9481;
-      --user1:#aedbe9; --user2:#aedbe9;
+      --user1:#d8eff7; --user2:#d8eff7;
       --bg:#adc0af;                 /* lighter green behind chat area */
-      --page:#838373;               /* single-page background color */
+      --page:#444444;               /* single-page background color */
       --white:#9f9481; --border:#e2e8f0; --ink:#222; --muted:#666;
       --code-bg:#f6f6f6; --code-bd:#eee; --toast-bg:#111; --toast-fg:#fff;
       --drawer:#f6faf7;             /* history drawer background */
-      --botPink:#f7cadf; --botPinkBorder:#ffd6e7;
+      --botPink:#f8dce8; --botPinkBorder:#ffd6e7;
       --title:#0f172a;
     }
     *{box-sizing:border-box}
@@ -33,31 +33,83 @@
     /* Header */
     .chat-header{
       background: linear-gradient(135deg, var(--brand1) 0%, var(--brand2) 100%);
-      color:white; padding:8px 16px; font-size:18px; font-weight:700;
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      color:white; padding:10px 16px; font-size:18px; font-weight:700;
+      display:flex; align-items:center; gap:12px;
       border-bottom:1px solid rgba(255,255,255,.18);
+      flex-wrap:nowrap;
     }
 
-    /* Brand block: avatar above name */
-    .brand{
-      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
-      min-width:100px;
+    /* LEFT side (avatar + chat name) — balanced, not huge */
+    .header-left{
+      display:flex; align-items:center; gap:12px;
+      flex: 1 1 180px;
+      min-width: 340px;
+      max-width: 56%;
+      overflow:hidden;
     }
+
+    /* RIGHT side (controls) — gets the rest, can wrap its own buttons */
+    .header-right{
+      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+      justify-content:flex-end;
+      flex: 1 1 420px;
+      min-width: 380px;
+      max-width: 44%;
+    }
+
+    /* vertical divider */
+    .header-divider{
+      width:1px; height:64px;
+      background:rgba(255,255,255,.28);
+      border-radius:1px;
+    }
+
+    /* title stack */
+    .title-wrap{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+    .name-block{ display:flex; flex-direction:column; gap:6px; min-width:0; }
+    .session-title{
+      display:block; color:#fff; font-weight:700; font-size:16px;
+      max-width: clamp(220px, 40vw, 520px);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+
+    /* wrap on smaller screens */
+    @media (max-width:980px){
+      .chat-header{ flex-wrap:wrap; }
+      .header-left{ flex:1 1 100%; max-width:100%; min-width:0; }
+      .header-right{ flex:1 1 100%; max-width:100%; justify-content:center; }
+      .header-divider{ display:none; }
+    }
+    @media (max-width:700px){
+      .chat-header{ flex-direction:column; align-items:stretch; }
+      .header-left{ width:100%; }
+      .header-right{ justify-content:center; }
+    }
+
+    /* Brand */
+    .brand{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-width:100px; }
     .avatar{ width:72px; height:72px; border-radius:50%; object-fit:cover; object-position:center;
       border:2px solid rgba(255,255,255,.7); box-shadow: 0 2px 8px rgba(0,0,0,.15); background:#ddd; }
     .brand-name{ font-size:16px; font-weight:700; letter-spacing:.2px; }
 
-    /* Session title (auto + inline rename) */
-    .session-title{
-      flex:1; text-align:center; color:#fff; opacity:.95; font-weight:700; letter-spacing:.2px;
-      user-select:none;
+    .field-label--inverse{
+      color:#fff; opacity:.9; font-size:9px; font-weight:600; letter-spacing:.3px;
+      text-transform:uppercase; user-select:none;
     }
-    .session-title .edit{
-      margin-left:8px; font-size:12px; cursor:pointer;
-      border:1px solid rgba(255,255,255,.6);
-      padding:2px 6px; border-radius:8px;
-      background:rgba(255,255,255,.12);
-      color:#fff;                 /* Rename text white */
+
+    .name-label{
+      font-size:11px; color:#fff; opacity:.9; letter-spacing:.12em; line-height:1; margin-bottom:2px; text-transform:uppercase;
+    }
+
+    .rename-btn{
+      margin-top:6px; border:1px solid rgba(255,255,255,.6);
+      background:rgba(255,255,255,.12); color:#fff; border-radius:8px; padding:2px 8px; font-size:12px; cursor:pointer;
+    }
+    .rename-btn:hover{ background:rgba(255,255,255,.2); }
+
+    @media (max-width:700px){
+      .session-title{ max-width:100%; font-size:15px; }
+      .name-block{ min-width:auto; }
     }
     .session-title[contenteditable="true"]{
       background:rgba(255,255,255,.14); border-radius:8px; padding:2px 8px; outline:1px solid rgba(255,255,255,.35);
@@ -80,9 +132,7 @@
     .btn.stop{border-color:#ffb3b3; color:#fff; background:rgba(255,0,179,0.15)}
     .btn.stop[disabled]{opacity:.5; cursor:not-allowed}
 
-    .chat-messages{
-      flex:1; padding:24px; overflow-y:auto; background:var(--bg); scroll-behavior:smooth;
-    }
+    .chat-messages{flex:1; padding:24px; overflow-y:auto; background:var(--bg); scroll-behavior:smooth;}
     .message{margin-bottom:26px; display:flex; position:relative;}
     .message.user{justify-content:flex-end;}
     .message-content{
@@ -90,19 +140,29 @@
       border:1px solid transparent; white-space:normal; word-wrap:break-word;
     }
     .message.user .message-content{
-      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%); color:#000; /* user text black */
+      background: linear-gradient(135deg, var(--user1) 0%, var(--user2) 100%); color:#000;
       box-shadow: 0 2px 10px rgba(0,0,0,.06); border: 1px solid rgba(0,0,0,.05);
     }
-    /* bot bubble: pink with black text + extra right padding for copy button, no extra bottom gap */
     .message.bot .message-content{
-      background:var(--botPink);
-      border-color:var(--botPinkBorder);
-      color:#000;
-      padding-right:56px;       /* space so copy button doesn't cover text */
-      margin-bottom:6px;        /* tighter spacing */
+      background:var(--botPink); border-color:var(--botPinkBorder); color:#000; padding-right:56px;
     }
 
-    /* Bubble controls */
+    /* Article typography inside bot messages */
+    .message.bot .message-content h1{ font-size:24px; font-weight:800; line-height:1.25; margin:0 0 10px; }
+    .message.bot .message-content h2{ font-size:18px; font-weight:700; line-height:1.3; margin:16px 0 8px; }
+    .message.bot .message-content h3{ font-size:16px; font-weight:700; line-height:1.35; margin:16px 0 6px; }
+    .message.bot .message-content p{ margin:10px 0; font-weight:400; }
+    .message.bot .message-content ul,
+    .message.bot .message-content ol{ margin: 8px 0 12px 1.15rem; padding: 0; }
+    .message.bot .message-content strong{ font-weight:600; } /* subtle emphasis */
+    .message.bot .message-content li{ margin: 4px 0; }
+    .message.bot .message-content code{
+      background:var(--code-bg); border:1px solid var(--code-bd); padding:2px 5px; border-radius:6px;
+    }
+    .message.bot .message-content pre{
+      background:#f6f6f6; border:1px solid #eee; border-radius:10px; padding:10px; overflow:auto; margin:10px 0;
+    }
+
     .bubble-actions{
       display:flex; gap:6px; position:absolute; bottom:-22px; left:8px; font-size:12px; opacity:.85;
     }
@@ -111,16 +171,12 @@
     }
     .bubble-actions button:hover{ background:#f3f4f6; }
 
-    /* Reactions row */
-    .reactions{
-      display:flex; gap:6px; margin-top:6px; opacity:.9;
-    }
+    .reactions{ display:flex; gap:6px; margin-top:6px; opacity:.9; }
     .reactions button{
       border:1px solid #f1d7e2; background:#fff; padding:2px 6px; border-radius:12px; cursor:pointer; font-size:12px;
     }
     .reactions button:hover{ background:#ffeaf3; }
 
-    /* Copy button — only on bot messages (JS) */
     .copy{
       position:absolute; top:8px; right:8px; border:none; background:#f3eef2; color:#333;
       padding:4px 8px; border-radius:10px; font-size:12px; cursor:pointer; z-index:1;
@@ -140,7 +196,6 @@
     .send-button[disabled]{opacity:.6; cursor:not-allowed}
     .note{margin-top:4px; font-size:12px; color:var(--muted);}
 
-    /* Slash menu hint */
     .slash-menu{
       position:absolute; bottom:60px; left:28px; background:#fff; border:1px solid #e5e7eb; border-radius:12px;
       box-shadow:0 12px 30px rgba(0,0,0,.12); padding:8px; display:none; min-width:260px; z-index:5;
@@ -148,14 +203,12 @@
     .slash-menu .item{ padding:8px 10px; border-radius:8px; cursor:pointer; }
     .slash-menu .item:hover{ background:#f6f7f9; }
 
-    /* Typing dots animation */
     .typing-wrap{display:inline-flex; align-items:center; gap:8px; color:#64748b;}
     .dots{display:inline-flex; gap:4px;}
     .dot{ width:6px; height:6px; background:#9aa; border-radius:50%; animation: jump 1s infinite ease-in-out; }
     .dot:nth-child(2){ animation-delay: .15s; } .dot:nth-child(3){ animation-delay: .3s; }
     @keyframes jump{ 0%,80%,100%{ transform:translateY(0); opacity:.35; } 40%{ transform:translateY(-4px); opacity:1; } }
 
-    /* Toast */
     .toast{
       position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
       background:var(--toast-bg); color:var(--toast-fg); padding:10px 14px; border-radius:10px;
@@ -163,7 +216,6 @@
     }
     .toast.show{opacity:.95}
 
-    /* History drawer */
     .drawer{
       position:fixed; top:0; right:0; width:430px; max-width:95vw; height:100vh;
       background:var(--drawer); border-left:1px solid #dfe7e2; box-shadow: -12px 0 30px rgba(0,0,0,.15);
@@ -174,7 +226,7 @@
     .drawer header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e5eee8; gap:8px; }
     .drawer h3{ margin:0; font-size:18px; }
     .drawer .list{ flex:1; overflow:auto; padding:10px 12px; }
-    .file{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid #e5eee8;
+    .file{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid #e5e7eb;
       border-radius:10px; background:#fff; margin-bottom:10px; }
     .file .meta { font-size:13px; color:#334; }
     .file .actions button{ margin-left:8px; border:1px solid #ddd; background:#f8faf9; padding:6px 8px; border-radius:8px; cursor:pointer; }
@@ -182,44 +234,28 @@
     .drawer .search{flex:1; margin-left:8px;}
     .drawer input[type="search"]{width:100%; padding:8px 10px; border:1px solid #d7e2dc; border-radius:10px;}
 
-    /* Save-name modal */
-    .modal-backdrop{
-      position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:60;
-    }
-    .modal{
-      width:min(520px, 92vw); background:#fff; border-radius:16px; padding:18px; box-shadow:0 20px 50px rgba(0,0,0,.25);
-      border:1px solid #e5e7eb;
-    }
+    .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:60; }
+    .modal{ width:min(520px, 92vw); background:#fff; border-radius:16px; padding:18px; box-shadow:0 20px 50px rgba(0,0,0,.25); border:1px solid #e5e7eb; }
     .modal h3{margin:0 0 8px 0; font-size:18px}
     .modal p{margin:0 0 12px 0; color:#555; font-size:14px}
     .modal-row{display:flex; gap:8px; align-items:center; margin-top:8px}
-    .modal input[type="text"]{
-      flex:1; padding:10px 12px; border:1.8px solid #e5e7eb; border-radius:10px; font-size:14px; outline:none;
-    }
+    .modal input[type="text"]{ flex:1; padding:10px 12px; border:1.8px solid #e5e7eb; border-radius:10px; font-size:14px; outline:none; }
     .modal input[type="text"]:focus{border-color:#cbd5e1; box-shadow:0 0 0 3px rgba(148,163,184,.25)}
     .modal .small{font-size:12px; color:#777; margin-top:6px}
     .modal .actions{display:flex; gap:8px; justify-content:flex-end; margin-top:14px}
-    .modal .actions button{
-      padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb; cursor:pointer; background:#fff; font-weight:600;
-    }
+    .modal .actions button{ padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb; cursor:pointer; background:#fff; font-weight:600; }
     .modal .actions .primary{ background:#1f2937; color:#fff; border-color:#1f2937; }
     .modal .actions .primary:hover{ filter:brightness(1.1); }
     .modal .actions .ghost:hover{ background:#f3f4f6; }
 
-    /* Jump to latest floater */
+    .field-label{ display:block; margin-bottom:6px; font-size:12px; font-weight:600; color:#111; }
+
     .to-latest{
       position:absolute; left:50%; bottom:88px; transform:translateX(-50%);
       background:#fff; border:1px solid #e5e7eb; border-radius:999px; padding:8px 12px; font-weight:600;
       box-shadow:0 6px 20px rgba(0,0,0,.12); display:none; cursor:pointer; z-index:2;
     }
 
-    /* Mobile */
-    @media (max-width:700px){
-      .chat-header{ flex-direction:column; align-items:stretch; gap:8px; }
-      .toolbar{ justify-content:center; }
-      .brand{ min-width:auto; }
-      .session-title{ order:3; padding-bottom:4px; }
-    }
     @media (max-width:600px){
       .chat-container{width:100%; height:100%; border-radius:0;}
       .chat-input-container{position:sticky; bottom:0;}
@@ -231,16 +267,24 @@
 <body>
   <div class="chat-container">
     <div class="chat-header">
-      <div class="brand">
-        <img class="avatar" id="avatar" src="/assets/hanza.jpg?v=1" alt="Hanza Stephens" />
-        <span class="brand-name">Hanza Bot</span>
+      <div class="header-left">
+        <div class="brand">
+          <img class="avatar" id="avatar" src="/assets/hanza.jpg?v=1" alt="Hanza Stephens" />
+          <span class="brand-name">Hanza Bot</span>
+        </div>
+
+        <div class="title-wrap">
+          <span class="field-label--inverse">Chat Name</span>
+          <div class="name-block">
+            <div class="session-title" id="sessionTitle" title="Untitled Session">Untitled Session</div>
+            <button class="rename-btn" id="editTitleBtn" title="Rename">Rename</button>
+          </div>
+        </div>
       </div>
 
-      <div class="session-title" id="sessionTitle">
-        Untitled Session <button class="edit" id="editTitleBtn" title="Rename">Rename</button>
-      </div>
+      <div class="header-divider" aria-hidden="true"></div>
 
-      <div class="toolbar">
+      <div class="header-right toolbar">
         <div class="control">
           <label for="tone">Tone</label>
           <select id="tone">
@@ -272,7 +316,8 @@
     <div class="chat-messages" id="chatMessages">
       <div class="message bot">
         <div class="message-content">
-          👋 New session. Tell me the topic, pick <strong>Tone</strong> and <strong>Length</strong>, and I'll draft in your voice.
+          👋 Hi Hanza! I'm your AI assistant for writing blog posts in your voice and style.
+          Choose a <strong>Tone</strong> and <strong>Length</strong>, then ask me to create, brainstorm, or polish a post.
           <div class="note">Tip: Enter to send, Shift+Enter for a new line. Type <code>/</code> for quick presets.</div>
         </div>
       </div>
@@ -284,12 +329,10 @@
       <textarea class="chat-input" id="messageInput" placeholder="Write a blog post about leadership during change..." rows="1"></textarea>
       <button class="send-button" id="sendButton">Send 📤</button>
 
-      <!-- Slash menu -->
       <div class="slash-menu" id="slashMenu"></div>
     </div>
   </div>
 
-  <!-- History Drawer -->
   <aside class="drawer" id="historyDrawer" aria-hidden="true">
     <header>
       <h3>Saved Conversations</h3>
@@ -304,12 +347,12 @@
     </div>
   </aside>
 
-  <!-- Name-before-save modal -->
   <div class="modal-backdrop" id="nameModal">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="nameTitle">
       <h3 id="nameTitle">Name this conversation</h3>
       <p>Choose a friendly name. We’ll use it for the saved PDF filename.</p>
-      <div class="modal-row">
+      <div class="modal-row" style="flex-direction:column; align-items:stretch;">
+        <label for="convName" class="field-label">Name</label>
         <input type="text" id="convName" placeholder="e.g., Leadership During Change" />
       </div>
       <div class="small">Tip: You can include spaces; we’ll make a clean filename.</div>
@@ -392,7 +435,51 @@
       maybeShowSlashMenu();
     });
 
-    // Markdown renderer (simple)
+    // --- Context preload (style + sources) ---
+    let STYLE_GUIDE = '';
+    let SOURCES = [];
+
+    async function preloadContext() {
+      if (!STYLE_GUIDE) {
+        try {
+          const r = await fetch('/assets/style_guide.md');
+          STYLE_GUIDE = await r.text();
+        } catch {}
+      }
+      if (!SOURCES.length) {
+        try {
+          const r = await fetch('/api/sources');
+          const j = await r.json();
+          if (j?.ok) SOURCES = j.items;
+        } catch {}
+      }
+    }
+
+    function buildContextPrompt(userPrompt) {
+      const perFile = 1200;      // chars per source excerpt
+      const maxTotal = 8000;     // overall excerpt budget
+      let ctx = '';
+      for (const it of SOURCES) {
+        const chunk = (it.text || '').slice(0, perFile);
+        if (!chunk.trim()) continue;
+        ctx += `\n\n### Source: ${it.name}\n${chunk}`;
+        if (ctx.length > maxTotal) break;
+      }
+
+      const guide = STYLE_GUIDE ? `VOICE & STYLE (verbatim):\n${STYLE_GUIDE}\n` : '';
+      const instructions = `
+INSTRUCTIONS:
+- Write in Hanza's voice & style above.
+- Prefer the excerpts for facts/ideas; add general knowledge only if needed.
+- Use Markdown: # title, ## sections, short paragraphs, bullets.
+- Provide 3–5 action steps with an example/template.
+- Finish with a decisive takeaway line.
+`.trim();
+
+      return `${guide}${ctx ? `\n\nCONTEXT EXCERPTS:\n${ctx}\n` : ''}\n${instructions}\n\n---\n\nUSER REQUEST:\n${userPrompt}`;
+    }
+
+    // Markdown renderer (stream-friendly)
     function renderMarkdown(mdText=''){
       const esc = s => s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
       let s = esc(mdText);
@@ -406,9 +493,11 @@
       s = s.replace(/^\s*\d+\.\s+(.*)$/gm, '<li>$1</li>');
       s = s.replace(/(?:<li>.*<\/li>\n?)+/g, m=>`<ul>${m}</ul>`);
       s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-      s = s.replace(/(^|\n)([^\n<][^\n]*)/g, (m,a,b)=>{ if (/^\s*<(h\d|ul|li|\/ul|pre|code)/.test(b)) return m; return `${a}<p>${b}</p>`; });
+      s = s.replace(/(^|\n)([^\n<].*)/g, (m,a,b)=>{ if (/^\s*(<h\d|<ul>|<li>|<\/ul>|<pre>|<code>|<\/pre>|<\/code>)/.test(b)) return m; return `${a}<p>${b}</p>`; });
+      s = s.replace(/<strong>([^<]{140,})<\/strong>/g, '$1'); // de-bolder for long spans
       return s;
     }
+
     function decorateCodeCopies(container){
       container.querySelectorAll('pre').forEach(pre=>{
         if (pre.querySelector('.code-copy')) return;
@@ -423,7 +512,6 @@
       });
     }
 
-    // Utility: add reactions row
     function addReactions(bubble){
       const bar = document.createElement('div');
       bar.className = 'reactions';
@@ -435,24 +523,18 @@
       bubble.appendChild(bar);
     }
 
-    // Utility: bubble action buttons
     function addBubbleActions(row, isUser){
-      const bar = document.createElement('div');
-      bar.className = 'bubble-actions';
+      const bar = document.createElement('div'); bar.className = 'bubble-actions';
       if (isUser){
         const edit = document.createElement('button'); edit.textContent = '✏️ Edit & Resend';
         edit.addEventListener('click', ()=>{
           const text = row.querySelector('.message-content').innerText;
-          messageInput.value = text;
-          messageInput.focus();
-          row.remove(); saveChat();
+          messageInput.value = text; messageInput.focus(); row.remove(); saveChat();
         });
         bar.appendChild(edit);
       }else{
         const regen = document.createElement('button'); regen.textContent = '🔄 Regenerate';
-        regen.addEventListener('click', ()=> {
-          if (lastUserPrompt) sendWithPrompt(lastUserPrompt, true);
-        });
+        regen.addEventListener('click', ()=>{ if (lastUserPrompt) sendWithPrompt(lastUserPrompt, true); });
         const cont = document.createElement('button'); cont.textContent = '➡️ Continue';
         cont.addEventListener('click', ()=> sendWithPrompt('Continue.', false));
         bar.appendChild(regen); bar.appendChild(cont);
@@ -467,7 +549,6 @@
       bubble.className = 'message-content';
       if (isHtml) bubble.innerHTML = content; else bubble.textContent = content;
 
-      // Copy button ONLY for bot messages
       if (!isUser){
         const copyBtn = document.createElement('button');
         copyBtn.className = 'copy'; copyBtn.textContent = 'Copy';
@@ -481,13 +562,9 @@
 
       row.appendChild(bubble);
       chatMessages.appendChild(row);
-
-      // Actions + reactions
       addBubbleActions(row, isUser);
       if (!isUser) addReactions(bubble);
-
       if (!isUser) decorateCodeCopies(bubble);
-
       if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
       saveChat();
       return bubble;
@@ -502,7 +579,6 @@
         const es = new EventSource(`/api/stream?${q.toString()}`);
         currentES = es; stopBtn.disabled = false;
 
-        // typing dots until first token lands
         let buffer = ''; let raf = false;
         targetBubble.innerHTML = `
           <div class="typing-wrap">
@@ -512,12 +588,11 @@
         `;
 
         const flush = ()=>{
-          if (!buffer) return; // keep dots
+          if (!buffer) return;
           targetBubble.innerHTML = renderMarkdown(buffer);
           decorateCodeCopies(targetBubble);
           if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
-          saveChat();
-          raf = false;
+          saveChat(); raf = false;
         };
 
         es.onmessage = (e)=>{
@@ -540,7 +615,8 @@
 
     // Auto-title helpers
     function setSessionTitle(txt){
-      sessionTitle.firstChild.nodeValue = txt + ' ';
+      sessionTitle.textContent = txt;
+      sessionTitle.setAttribute('title', txt);
       localStorage.setItem(TITLE_KEY, txt);
     }
     function maybeAutoTitleFrom(msg){
@@ -552,20 +628,17 @@
     }
     editTitleBtn.addEventListener('click', ()=>{
       sessionTitle.setAttribute('contenteditable','true');
-      const range = document.createRange(); const sel = window.getSelection();
-      range.selectNodeContents(sessionTitle.childNodes[0]); sel.removeAllRanges(); sel.addRange(range);
-      sessionTitle.focus();
+      const range = document.createRange(); range.selectNodeContents(sessionTitle);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); sessionTitle.focus();
     });
     sessionTitle.addEventListener('blur', ()=>{
       sessionTitle.removeAttribute('contenteditable');
       const raw = sessionTitle.textContent.replace('Rename','').trim() || 'Untitled Session';
       setSessionTitle(raw);
     });
-    sessionTitle.addEventListener('keydown', (e)=>{
-      if (e.key==='Enter'){ e.preventDefault(); sessionTitle.blur(); }
-    });
+    sessionTitle.addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ e.preventDefault(); sessionTitle.blur(); } });
 
-    // Slash command presets
+    // Slash menu presets
     const presets = {
       '/outline': 'Create a blog post outline with H1/H2, bullet points, and a crisp CTA at the end.',
       '/seo': 'Draft an SEO brief: target keywords, search intent, title ideas, meta description, H2s, and internal link suggestions.',
@@ -577,13 +650,10 @@
       const val = messageInput.value.trim();
       if (!val.startsWith('/')){ slashMenu.style.display='none'; return; }
       const items = Object.entries(presets)
-        .filter(([k])=> k.startsWith(val))
-        .slice(0,5)
-        .map(([k,v])=> `<div class="item" data-key="${k}"><strong>${k}</strong> — <span style="opacity:.8">${v}</span></div>`)
-        .join('');
+        .filter(([k])=> k.startsWith(val)).slice(0,5)
+        .map(([k,v])=> `<div class="item" data-key="${k}"><strong>${k}</strong> — <span style="opacity:.8">${v}</span></div>`).join('');
       if (!items){ slashMenu.style.display='none'; return; }
-      slashMenu.innerHTML = items;
-      slashMenu.style.display = 'block';
+      slashMenu.innerHTML = items; slashMenu.style.display = 'block';
       const rect = messageInput.getBoundingClientRect();
       const host = document.querySelector('.chat-input-container').getBoundingClientRect();
       slashMenu.style.left = (rect.left - host.left + 16) + 'px';
@@ -624,29 +694,21 @@
 
       lastUserPrompt = prompt;
 
+      // NEW: load context and wrap prompt
+      await preloadContext();
+      const guidedPrompt = buildContextPrompt(prompt);
+
       const botBubble = addMessage('', false, true);
-      await streamBotResponse(prompt, currentOptions(), botBubble);
+      await streamBotResponse(guidedPrompt, currentOptions(), botBubble);
 
       sendButton.disabled = false;
     }
 
-    async function handleSend(){
-      await sendWithPrompt(messageInput.value);
-    }
-
+    async function handleSend(){ await sendWithPrompt(messageInput.value); }
     sendButton.addEventListener('click', handleSend);
     messageInput.addEventListener('keypress', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); } });
 
-    /* ---------------- History drawer (Open / Download / Delete / Jump Back In) + Search ---------------- */
-
-    // NEW: pretty display name from file name
-    function displayNameFromFile(name = '') {
-      const noExt = name.replace(/\.(pdf|md|json)$/i, '');
-      const noStamp = noExt.replace(/(?:__|_)\d{4}-\d{2}-\d{2}(?:T\d{2}-\d{2}-\d{2}(?:-\d+Z)?)?$/,'');
-      const pretty = noStamp.replace(/[-_]+/g, ' ').trim();
-      return pretty || 'Untitled';
-    }
-
+    // ------- History drawer (Open / Download / Delete / Jump Back In) + Search -------
     async function loadHistory(){
       historyList.innerHTML = '<div class="meta" style="padding:12px;">Loading…</div>';
       try{
@@ -655,15 +717,16 @@
         if (!data.files.length){ historyList.innerHTML = '<div class="meta" style="padding:12px;">No saved conversations yet.</div>'; return; }
         historyList.innerHTML = '';
         data.files.forEach(f=>{
-          const row = document.createElement('div'); row.className = 'file';
-          const niceName = displayNameFromFile(f.name || '');
-          row.dataset.name = niceName.toLowerCase(); // for search
+          const raw = f.name || '';
+          const base = raw.replace(/\.(pdf|md)$/i,'');
+          const cleanName = base.split('__')[0] || base;
 
+          const row = document.createElement('div'); row.className = 'file'; row.dataset.name = cleanName.toLowerCase();
           const when = new Date(f.mtime).toLocaleString();
           const sizeKB = Math.max(1, Math.round(f.size/1024));
           row.innerHTML = `
             <div class="meta">
-              <div><strong>${niceName}</strong></div>
+              <div><strong>${cleanName}</strong></div>
               <div style="font-size:12px; color:#667;">${when} • ${sizeKB} KB</div>
             </div>
             <div class="actions">
@@ -672,14 +735,12 @@
               ${f.jsonUrl ? '<button data-jump>Jump Back In</button>' : ''}
               <button data-del style="border-color:#f3c2c2;background:#fff0f0;">Delete</button>
             </div>`;
-
-          // actions keep the real file/url
           row.querySelector('[data-open]').addEventListener('click', ()=> window.open(f.url, '_blank'));
           row.querySelector('[data-dl]').addEventListener('click', ()=>{
             const a = document.createElement('a'); a.href = f.url; a.download = f.name; a.click();
           });
           if (f.jsonUrl) {
-            row.querySelector('[data-jump]')?.addEventListener('click', async ()=>{
+            row.querySelector('[data-jump]').addEventListener('click', async ()=>{
               try{
                 const jr = await fetch(f.jsonUrl);
                 const j = await jr.json();
@@ -690,7 +751,7 @@
                   const content = turn.text || '';
                   addMessage(content, isUser, false);
                 });
-                setSessionTitle(niceName);
+                setSessionTitle(cleanName);
                 showToast('Conversation loaded.');
                 closeDrawer(); messageInput.focus();
               }catch{
@@ -728,19 +789,9 @@
     refreshBtn.addEventListener('click', loadHistory);
     historySearch.addEventListener('input', applyHistoryFilter);
 
-    /* ---------------- Name + Save (PDF on server) ---------------- */
-    function slugifyName(s=''){
-      return s
-        .toLowerCase()
-        .replace(/[^a-z0-9\s\-_.]/g,'')
-        .trim()
-        .replace(/\s+/g,'-')
-        .replace(/\-+/g,'-') || 'conversation';
-    }
-    function firstUserLine(){
-      const el = document.querySelector('.message.user .message-content');
-      return (el?.innerText || '').split('\n').find(Boolean) || '';
-    }
+    // Save modal helpers (unchanged)
+    function slugifyName(s=''){ return (s.toLowerCase().replace(/[^a-z0-9\s\-_.]/g,'').trim().replace(/\s+/g,'-').replace(/\-+/g,'-') || 'conversation'); }
+    function firstUserLine(){ const el = document.querySelector('.message.user .message-content'); return (el?.innerText || '').split('\n').find(Boolean) || ''; }
     function defaultTitle(){
       const title = (sessionTitle.textContent || '').replace('Rename','').trim();
       if (title && title !== 'Untitled Session') return title;
@@ -755,14 +806,12 @@
         return { role, text };
       });
     }
-
     function openNameModal(){
       nameModal.style.display = 'flex';
       convName.value = defaultTitle().replace(/_/g,' ');
       setTimeout(()=> convName.focus(), 0);
     }
     function closeNameModal(){ nameModal.style.display = 'none'; }
-
     saveBtn.addEventListener('click', openNameModal);
     cancelSave.addEventListener('click', closeNameModal);
     nameModal.addEventListener('click', (e)=>{ if (e.target === nameModal) closeNameModal(); });
@@ -773,18 +822,13 @@
       const title  = slugifyName(pretty);
       try{
         const transcript = collectTranscript();
-        const r = await fetch('/api/save',{
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ transcript, format:'pdf', title })
-        });
+        const r = await fetch('/api/save',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ transcript, format:'pdf', title }) });
         const data = await r.json();
         if (data?.ok){
           showToast(`Saved: ${data.file}`);
           closeNameModal();
           if (drawer.classList.contains('open')) loadHistory();
-        } else {
-          showToast('Save failed');
-        }
+        } else { showToast('Save failed'); }
       }catch{ showToast('Save failed'); }
     });
 
@@ -797,17 +841,10 @@
             👋 New session. Tell me the topic, pick <strong>Tone</strong> and <strong>Length</strong>, and I'll draft in your voice.
             <div class="note">Tip: Enter to send, Shift+Enter for a new line. Type <code>/</code> for quick presets.</div>
           </div>
-        </div>
-      `;
+        </div>`;
       setSessionTitle('Untitled Session');
       saveChat(); showToast('New chat started'); messageInput.focus();
     });
-
-    // Helpers: title
-    function setSessionTitle(txt){
-      sessionTitle.firstChild.nodeValue = txt + ' ';
-      localStorage.setItem(TITLE_KEY, txt);
-    }
 
     // Focus input on load
     messageInput.focus();
