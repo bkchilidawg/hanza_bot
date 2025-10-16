@@ -295,7 +295,7 @@ app.get("/api/stream", async (req, res) => {
     const clientStuffed = /CONTEXT EXCERPTS:/i.test(message);
     const retrieved = clientStuffed ? [] : await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
 
-    // --- NEW: Abort upstream call if the client disconnects
+    // --- Abort upstream call if the client disconnects
     const ac = new AbortController();
     const { signal } = ac;
     req.on("close", () => {
@@ -354,7 +354,7 @@ app.get("/api/stream", async (req, res) => {
         try {
           const json = JSON.parse(data);
           const token = json.choices?.[0]?.delta?.content || "";
-          // --- NEW: simple, robust token write
+          // simple, robust token write
           if (token) res.write(`data: ${escapeSSE(token)}\n\n`);
         } catch {
           // ignore keep-alives / non-JSON lines
@@ -394,7 +394,6 @@ app.post("/api/save", async (req, res) => {
     };
     fs.writeFileSync(jsonPath, JSON.stringify(jsonDoc, null, 2), "utf8");
 
-    // If MD requested, write it; otherwise default to PDF
     if (format === "md") {
       const mdName = `${base}.md`;
       const mdPath = path.join(TRANSCRIPTS, mdName);

@@ -1,25 +1,26 @@
+<!-- /public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Hanza Bot - Blog Writing Assistant</title>
   <style>
     :root{
-      --brand1:#9f9481; --brand2:#9f9481;
-      --user1:#d8eff7; --user2:#d8eff7;
-      --bg:#adc0af;                 /* lighter green behind chat area */
-      --page:#444444;               /* single-page background color */
-      --white:#9f9481; --border:#e2e8f0; --ink:#222; --muted:#666;
+      --brand1:#8a8383; --brand2:#8a8383;
+      --user1:#d4f0fa; --user2:#d4f0fa;
+      --bg:#a9afaa;
+      --page:#444444;
+      --white:#8a8383; --border:#e2e8f0; --ink:#222; --muted:#666;
       --code-bg:#f6f6f6; --code-bd:#eee; --toast-bg:#111; --toast-fg:#fff;
-      --drawer:#f6faf7;             /* history drawer background */
-      --botPink:#f8dce8; --botPinkBorder:#ffd6e7;
+      --drawer:#f6faf7;
+      --botPink:#f8dfeb; --botPinkBorder:#f8dfeb;
       --title:#0f172a;
     }
     *{box-sizing:border-box}
     body{
       margin:0; font-family:'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color:var(--ink);
-      background: var(--page);
+      background:var(--page);
       display:flex; justify-content:center; align-items:center; height:100vh;
     }
     .chat-container{
@@ -29,7 +30,6 @@
       display:flex; flex-direction:column; overflow:hidden;
       position:relative;
     }
-
     /* Header */
     .chat-header{
       background: linear-gradient(135deg, var(--brand1) 0%, var(--brand2) 100%);
@@ -38,27 +38,9 @@
       border-bottom:1px solid rgba(255,255,255,.18);
       flex-wrap:nowrap;
     }
-
-    /* LEFT side (avatar + chat name) */
-    .header-left{
-      display:flex; align-items:center; gap:12px;
-      flex: 1 1 180px;
-      min-width: 340px;
-      max-width: 56%;
-      overflow:hidden;
-    }
-
-    /* RIGHT side (controls) */
-    .header-right{
-      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
-      justify-content:flex-end;
-      flex: 1 1 420px;
-      min-width: 380px;
-      max-width: 44%;
-    }
-
+    .header-left{ display:flex; align-items:center; gap:12px; flex: 1 1 180px; min-width: 340px; max-width: 56%; overflow:hidden; }
+    .header-right{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end; flex: 1 1 420px; min-width: 380px; max-width: 44%; }
     .header-divider{ width:1px; height:64px; background:rgba(255,255,255,.28); border-radius:1px; }
-
     .title-wrap{ display:flex; flex-direction:column; gap:2px; min-width:0; }
     .name-block{ display:flex; flex-direction:column; gap:6px; min-width:0; }
     .session-title{
@@ -66,7 +48,6 @@
       max-width: clamp(220px, 40vw, 520px);
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
-
     @media (max-width:980px){
       .chat-header{ flex-wrap:wrap; }
       .header-left{ flex:1 1 100%; max-width:100%; min-width:0; }
@@ -78,31 +59,20 @@
       .header-left{ width:100%; }
       .header-right{ justify-content:center; }
     }
-
     .brand{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-width:100px; }
     .avatar{ width:72px; height:72px; border-radius:50%; object-fit:cover; object-position:center;
       border:2px solid rgba(255,255,255,.7); box-shadow: 0 2px 8px rgba(0,0,0,.15); background:#ddd; }
     .brand-name{ font-size:16px; font-weight:700; letter-spacing:.2px; }
-
-    .field-label--inverse{
-      color:#fff; opacity:.9; font-size:9px; font-weight:600; letter-spacing:.3px;
-      text-transform:uppercase; user-select:none;
-    }
-
+    .field-label--inverse{ color:#fff; opacity:.9; font-size:9px; font-weight:600; letter-spacing:.3px; text-transform:uppercase; user-select:none; }
     .rename-btn{
       margin-top:6px; border:1px solid rgba(255,255,255,.6);
       background:rgba(255,255,255,.12); color:#fff; border-radius:8px; padding:2px 8px; font-size:12px; cursor:pointer;
     }
     .rename-btn:hover{ background:rgba(255,255,255,.2); }
-
-    @media (max-width:700px){
-      .session-title{ max-width:100%; font-size:15px; }
-      .name-block{ min-width:auto; }
-    }
+    @media (max-width:700px){ .session-title{ max-width:100%; font-size:15px; } .name-block{ min-width:auto; } }
     .session-title[contenteditable="true"]{
       background:rgba(255,255,255,.14); border-radius:8px; padding:2px 8px; outline:1px solid rgba(255,255,255,.35);
     }
-
     .toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
     .control{ display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.12);
       padding:6px 10px; border-radius:10px; font-size:13px; backdrop-filter: blur(4px); }
@@ -119,7 +89,6 @@
     .btn:hover{background:rgba(236,162,162,0.9)}
     .btn.stop{border-color:#ffb3b3; color:#fff; background:rgba(255,0,179,0.15)}
     .btn.stop[disabled]{opacity:.5; cursor:not-allowed}
-
     .chat-messages{flex:1; padding:24px; overflow-y:auto; background:var(--bg); scroll-behavior:smooth;}
     .message{margin-bottom:26px; display:flex; position:relative;}
     .message.user{justify-content:flex-end;}
@@ -134,8 +103,6 @@
     .message.bot .message-content{
       background:var(--botPink); border-color:var(--botPinkBorder); color:#000; padding-right:56px;
     }
-
-    /* Article typography inside bot messages */
     .message.bot .message-content h1{ font-size:24px; font-weight:800; line-height:1.25; margin:0 0 10px; }
     .message.bot .message-content h2{ font-size:18px; font-weight:700; line-height:1.3; margin:16px 0 8px; }
     .message.bot .message-content h3{ font-size:16px; font-weight:700; line-height:1.35; margin:16px 0 6px; }
@@ -147,84 +114,46 @@
     .message.bot .message-content ol{ margin: 8px 0 12px 1.15rem; padding: 0; }
     .message.bot .message-content strong{ font-weight:600; }
     .message.bot .message-content li{ margin: 4px 0; }
-    .message.bot .message-content code{
-      background:var(--code-bg); border:1px solid var(--code-bd); padding:2px 5px; border-radius:6px;
-    }
-    .message.bot .message-content pre{
-      background:#f6f6f6; border:1px solid #eee; border-radius:10px; padding:10px; overflow:auto; margin:10px 0;
-    }
-
-    .bubble-actions{
-      display:flex; gap:6px; position:absolute; bottom:-22px; left:8px; font-size:12px; opacity:.85;
-    }
-    .bubble-actions button{
-      border:1px solid #e5e7eb; background:#fff; padding:2px 6px; border-radius:8px; cursor:pointer; font-size:12px;
-    }
+    .message.bot .message-content code{ background:var(--code-bg); border:1px solid var(--code-bd); padding:2px 5px; border-radius:6px; }
+    .message.bot .message-content pre{ background:#f6f6f6; border:1px solid #eee; border-radius:10px; padding:10px; overflow:auto; margin:10px 0; }
+    .bubble-actions{ display:flex; gap:6px; position:absolute; bottom:-22px; left:8px; font-size:12px; opacity:.85; }
+    .bubble-actions button{ border:1px solid #e5e7eb; background:#fff; padding:2px 6px; border-radius:8px; cursor:pointer; font-size:12px; }
     .bubble-actions button:hover{ background:#f3f4f6; }
-
     .reactions{ display:flex; gap:6px; margin-top:6px; opacity:.9; }
-    .reactions button{
-      border:1px solid #f1d7e2; background:#fff; padding:2px 6px; border-radius:12px; cursor:pointer; font-size:12px;
-    }
+    .reactions button{ border:1px solid #f1d7e2; background:#fff; padding:2px 6px; border-radius:12px; cursor:pointer; font-size:12px; }
     .reactions button:hover{ background:#ffeaf3; }
-
-    .copy{
-      position:absolute; top:8px; right:8px; border:none; background:#f3eef2; color:#333;
-      padding:4px 8px; border-radius:10px; font-size:12px; cursor:pointer; z-index:1;
-    }
+    .copy{ position:absolute; top:8px; right:8px; border:none; background:#f3eef2; color:#333; padding:4px 8px; border-radius:10px; font-size:12px; cursor:pointer; z-index:1; }
     .copy:hover{background:#e9e7e2}
-
-    .chat-input-container{
-      padding:16px 16px; background:var(--white); border-top:1px solid var(--border);
-      display:flex; gap:12px; align-items:flex-end; position:relative;
-    }
-    .chat-input{
-      flex:1; padding:14px 20px; border:2px solid var(--border); border-radius:24px;
-      font-size:15px; resize:none; outline:none; max-height:160px; min-height:44px; line-height:1.4;
-    }
-    .send-button{ background:#f3f3ee; border:2px solid var(--border); border-radius:24px;
-      padding:14px 20px; font-weight:700; cursor:pointer; min-width:110px; }
+    .chat-input-container{ padding:16px 16px; background:var(--white); border-top:1px solid var(--border); display:flex; gap:12px; align-items:flex-end; position:relative; }
+    .chat-input{ flex:1; padding:14px 20px; border:2px solid var(--border); border-radius:24px; font-size:15px; resize:none; outline:none; max-height:160px; min-height:44px; line-height:1.4; }
+    .send-button{ background:#f3f3ee; border:2px solid var(--border); border-radius:24px; padding:14px 20px; font-weight:700; cursor:pointer; min-width:110px; }
     .send-button[disabled]{opacity:.6; cursor:not-allowed}
     .note{margin-top:4px; font-size:12px; color:var(--muted);}
-
-    .slash-menu{
-      position:absolute; bottom:60px; left:28px; background:#fff; border:1px solid #e5e7eb; border-radius:12px;
-      box-shadow:0 12px 30px rgba(0,0,0,.12); padding:8px; display:none; min-width:260px; z-index:5;
-    }
+    .slash-menu{ position:absolute; bottom:60px; left:28px; background:#fff; border:1px solid #e5e7eb; border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,.12); padding:8px; display:none; min-width:260px; z-index:5; }
     .slash-menu .item{ padding:8px 10px; border-radius:8px; cursor:pointer; }
     .slash-menu .item:hover{ background:#f6f7f9; }
-
     .typing-wrap{display:inline-flex; align-items:center; gap:8px; color:#64748b;}
     .dots{display:inline-flex; gap:4px;}
     .dot{ width:6px; height:6px; background:#9aa; border-radius:50%; animation: jump 1s infinite ease-in-out; }
     .dot:nth-child(2){ animation-delay: .15s; } .dot:nth-child(3){ animation-delay: .3s; }
     @keyframes jump{ 0%,80%,100%{ transform:translateY(0); opacity:.35; } 40%{ transform:translateY(-4px); opacity:1; } }
-
-    .toast{
-      position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
-      background:var(--toast-bg); color:var(--toast-fg); padding:10px 14px; border-radius:10px;
-      font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:100;
+    @media (prefers-reduced-motion: reduce){
+      .dot{ animation:none !important; }
+      .chat-messages{ scroll-behavior:auto; }
     }
+    .toast{ position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--toast-bg); color:var(--toast-fg); padding:10px 14px; border-radius:10px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:100; }
     .toast.show{opacity:.95}
-
-    .drawer{
-      position:fixed; top:0; right:0; width:430px; max-width:95vw; height:100vh;
-      background:var(--drawer); border-left:1px solid #dfe7e2; box-shadow: -12px 0 30px rgba(0,0,0,.15);
-      transform: translateX(100%); transition: transform .25s ease; z-index:50;
-      display:flex; flex-direction:column;
-    }
+    .drawer{ position:fixed; top:0; right:0; width:430px; max-width:95vw; height:100vh; background:var(--drawer); border-left:1px solid #dfe7e2; box-shadow: -12px 0 30px rgba(0,0,0,.15); transform: translateX(100%); transition: transform .25s ease; z-index:50; display:flex; flex-direction:column; }
     .drawer.open{ transform: translateX(0); }
     .drawer header{ display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e5eee8; gap:8px; }
     .drawer h3{ margin:0; font-size:18px; }
     .drawer .list{ flex:1; overflow:auto; padding:10px 12px; }
-    .file{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid #e5e7eb;
-      border-radius:10px; background:#fff; margin-bottom:10px; }
+    .file{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; margin-bottom:10px; }
     .file .meta { font-size:13px; color:#334; }
     .file .actions button{ margin-left:8px; border:1px solid #ddd; background:#f8faf9; padding:6px 8px; border-radius:8px; cursor:pointer; }
     .file .actions button:hover{ background:#eef5f1; }
     .drawer .search{flex:1; margin-left:8px;}
     .drawer input[type="search"]{width:100%; padding:8px 10px; border:1px solid #d7e2dc; border-radius:10px;}
-
     .modal-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:60; }
     .modal{ width:min(520px, 92vw); background:#fff; border-radius:16px; padding:18px; box-shadow:0 20px 50px rgba(0,0,0,.25); border:1px solid #e5e7eb; }
     .modal h3{margin:0 0 8px 0; font-size:18px}
@@ -238,15 +167,8 @@
     .modal .actions .primary{ background:#1f2937; color:#fff; border-color:#1f2937; }
     .modal .actions .primary:hover{ filter:brightness(1.1); }
     .modal .actions .ghost:hover{ background:#f3f4f6; }
-
     .field-label{ display:block; margin-bottom:6px; font-size:12px; font-weight:600; color:#111; }
-
-    .to-latest{
-      position:absolute; left:50%; bottom:88px; transform:translateX(-50%);
-      background:#fff; border:1px solid #e5e7eb; border-radius:999px; padding:8px 12px; font-weight:600;
-      box-shadow:0 6px 20px rgba(0,0,0,.12); display:none; cursor:pointer; z-index:2;
-    }
-
+    .to-latest{ position:absolute; left:50%; bottom:88px; transform:translateX(-50%); background:#fff; border:1px solid #e5e7eb; border-radius:999px; padding:8px 12px; font-weight:600; box-shadow:0 6px 20px rgba(0,0,0,.12); display:none; cursor:pointer; z-index:2; }
     @media (max-width:600px){
       .chat-container{width:100%; height:100%; border-radius:0;}
       .chat-input-container{position:sticky; bottom:0;}
@@ -260,25 +182,22 @@
     <div class="chat-header">
       <div class="header-left">
         <div class="brand">
-          <img class="avatar" id="avatar" src="/assets/hanza.jpg?v=1" alt="Hanza Stephens" />
+          <img class="avatar" id="avatar" src="/assets/hanza.jpg?v=1" alt="Hanza Stephens"/>
           <span class="brand-name">Hanza Bot</span>
         </div>
-
         <div class="title-wrap">
-          <span class="field-label--inverse">Chat Name</span>
+          <span class="field-label--inverse" id="chatNameLbl">Chat Name</span>
           <div class="name-block">
-            <div class="session-title" id="sessionTitle" title="Untitled Session">Untitled Session</div>
-            <button class="rename-btn" id="editTitleBtn" title="Rename">Rename</button>
+            <div class="session-title" id="sessionTitle" title="Untitled Session" tabindex="0" aria-labelledby="chatNameLbl">Untitled Session</div>
+            <button class="rename-btn" id="editTitleBtn" title="Rename" aria-label="Rename chat">Rename</button>
           </div>
         </div>
       </div>
-
       <div class="header-divider" aria-hidden="true"></div>
-
-      <div class="header-right toolbar">
+      <div class="header-right toolbar" role="toolbar" aria-label="Chat controls">
         <div class="control">
           <label for="tone">Tone</label>
-          <select id="tone">
+          <select id="tone" aria-label="Tone">
             <option value="balanced">Balanced</option>
             <option value="formal">Formal</option>
             <option value="casual">Casual</option>
@@ -290,21 +209,22 @@
         </div>
         <div class="control">
           <label for="length">Length</label>
-          <select id="length">
+          <select id="length" aria-label="Length">
             <option value="concise">Concise (~600w)</option>
             <option value="standard">Standard (~900w)</option>
             <option value="detailed">Detailed (1200–1500w)</option>
             <option value="ultra">Ultra (2000w+)</option>
           </select>
         </div>
-        <button class="btn" id="newBtn">New Chat</button>
-        <button class="btn" id="saveBtn" title="Save transcript as PDF on server">Save PDF</button>
-        <button class="btn" id="historyBtn" title="Show saved conversations">History</button>
-        <button class="btn stop" id="stopBtn" title="Stop streaming" disabled>Stop</button>
+        <button class="btn" id="newBtn" aria-label="Start new chat">New Chat</button>
+        <button class="btn" id="saveBtn" title="Save transcript as PDF on server" aria-label="Save PDF">Save PDF</button>
+        <button class="btn" id="historyBtn" title="Show saved conversations" aria-label="Open history">History</button>
+        <button class="btn stop" id="stopBtn" title="Stop streaming" aria-label="Stop streaming" disabled>Stop</button>
       </div>
     </div>
 
-    <div class="chat-messages" id="chatMessages">
+    <!-- ARIA: live log for streaming updates -->
+    <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-relevant="additions text">
       <div class="message bot">
         <div class="message-content">
           👋 Hi Hanza! I'm your AI assistant for writing blog posts in your voice and style.
@@ -317,20 +237,20 @@
     <button class="to-latest" id="toLatest">Jump to latest ⬇️</button>
 
     <div class="chat-input-container">
-      <textarea class="chat-input" id="messageInput" placeholder="Write a blog post about leadership during change..." rows="1"></textarea>
-      <button class="send-button" id="sendButton">Send 📤</button>
-
+      <label for="messageInput" class="sr-only" style="position:absolute;left:-9999px">Message</label>
+      <textarea class="chat-input" id="messageInput" placeholder="Write a blog post about leadership during change..." rows="1" aria-label="Type your message"></textarea>
+      <button class="send-button" id="sendButton" aria-label="Send message">Send 📤</button>
       <div class="slash-menu" id="slashMenu"></div>
     </div>
   </div>
 
-  <aside class="drawer" id="historyDrawer" aria-hidden="true">
+  <aside class="drawer" id="historyDrawer" aria-hidden="true" aria-label="Saved conversations">
     <header>
       <h3>Saved Conversations</h3>
-      <input class="search" id="historySearch" type="search" placeholder="Search titles…" />
+      <input class="search" id="historySearch" type="search" placeholder="Search titles…" aria-label="Search history"/>
       <div>
-        <button id="refreshHistory">Refresh</button>
-        <button id="closeHistory">Close</button>
+        <button id="refreshHistory" aria-label="Refresh history">Refresh</button>
+        <button id="closeHistory" aria-label="Close history">Close</button>
       </div>
     </header>
     <div class="list" id="historyList">
@@ -344,7 +264,7 @@
       <p>Choose a friendly name. We’ll use it for the saved PDF filename.</p>
       <div class="modal-row" style="flex-direction:column; align-items:stretch;">
         <label for="convName" class="field-label">Name</label>
-        <input type="text" id="convName" placeholder="e.g., Leadership During Change" />
+        <input type="text" id="convName" placeholder="e.g., Leadership During Change"/>
       </div>
       <div class="small">Tip: You can include spaces; we’ll make a clean filename.</div>
       <div class="actions">
@@ -354,7 +274,9 @@
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
 
   <script>
     const chatMessages = document.getElementById('chatMessages');
@@ -386,7 +308,7 @@
 
     const slashMenu    = document.getElementById('slashMenu');
 
-    // Avatar fallback
+    // Avatar fallback (why: avoid broken image UI)
     avatar.addEventListener('error', () => {
       const badge = document.createElement('div');
       badge.textContent = 'HS';
@@ -400,26 +322,34 @@
     });
 
     // Persistence
-    const CHAT_KEY = 'hanza_chat_v4';
+    const CHAT_KEY = 'hanza_chat_v5';
     const SETTINGS_KEY = 'hanza_settings_v1';
     const TITLE_KEY = 'hanza_title_v1';
 
-    const saved = localStorage.getItem(CHAT_KEY);
+    const safeSet = (k,v)=>{ try{ localStorage.setItem(k,v); }catch{} };
+    const safeGet = (k)=>{ try{ return localStorage.getItem(k); }catch{ return null; } };
+
+    const saved = safeGet(CHAT_KEY);
     if (saved) chatMessages.innerHTML = saved;
-    const savedSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+
+    const savedSettings = JSON.parse(safeGet(SETTINGS_KEY) || '{}');
     toneSel.value   = savedSettings.tone   || 'balanced';
     lengthSel.value = savedSettings.length || 'concise';
 
-    // Restore session title
-    const savedTitle = localStorage.getItem(TITLE_KEY) || 'Untitled Session';
+    const savedTitle = safeGet(TITLE_KEY) || 'Untitled Session';
     setSessionTitle(savedTitle);
 
-    function saveChat(){ localStorage.setItem(CHAT_KEY, chatMessages.innerHTML); }
-    function saveSettings(){ localStorage.setItem(SETTINGS_KEY, JSON.stringify({ tone: toneSel.value, length: lengthSel.value })); }
+    let saveTimer = null;
+    function saveChatDebounced(){
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(()=> safeSet(CHAT_KEY, chatMessages.innerHTML), 600);
+    }
+    function saveSettings(){ safeSet(SETTINGS_KEY, JSON.stringify({ tone: toneSel.value, length: lengthSel.value })); }
     toneSel.addEventListener('change', saveSettings);
     lengthSel.addEventListener('change', saveSettings);
 
     function showToast(msg, ms=1400){ toast.textContent = msg; toast.classList.add('show'); setTimeout(()=> toast.classList.remove('show'), ms); }
+
     messageInput.addEventListener('input', () => {
       messageInput.style.height = 'auto';
       messageInput.style.height = Math.min(messageInput.scrollHeight, 160) + 'px';
@@ -447,8 +377,8 @@
     }
 
     function buildContextPrompt(userPrompt) {
-      const perFile = 1200;      // chars per source excerpt
-      const maxTotal = 8000;     // overall excerpt budget
+      const perFile = 1200;
+      const maxTotal = 8000;
       let ctx = '';
       for (const it of SOURCES) {
         const chunk = (it.text || '').slice(0, perFile);
@@ -456,70 +386,140 @@
         ctx += `\n\n### Source: ${it.name}\n${chunk}`;
         if (ctx.length > maxTotal) break;
       }
-
       const guide = STYLE_GUIDE ? `VOICE & STYLE (verbatim):\n${STYLE_GUIDE}\n` : '';
       const instructions = `
 INSTRUCTIONS:
 - Write in Hanza's voice & style above.
-- Prefer the excerpts for facts/ideas; add general knowledge only if needed.
-- Use Markdown: # title, ## sections, short paragraphs, bullets.
-- Provide 3–5 action steps with an example/template.
-- Finish with a decisive takeaway line.
+- Calm, strategic, practical. Clear frameworks, real steps.
+- Use Markdown: # title, ## sections, bullets.
+- Give 3–5 action steps with an example or template.
+- Include: one-sentence outcome, one metric that proves progress, a 7-day experiment.
+- Finish with a decisive takeaway line (see sample sign-off).
 `.trim();
 
       return `${guide}${ctx ? `\n\nCONTEXT EXCERPTS:\n${ctx}\n` : ''}\n${instructions}\n\n---\n\nUSER REQUEST:\n${userPrompt}`;
     }
 
-    // Markdown renderer (stream-friendly)
-    function renderMarkdown(mdText=''){
-      const esc = s => s.replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-      let s = esc(mdText).replace(/\r\n?/g, '\n');
+    /* === Markdown: normalize -> marked -> sanitize === */
+    /* ---------- Markdown normalizer ---------- */
+    function normalizeMarkdown(md = '') {
+      let s = (md || '').replace(/\r\n?/g, '\n');
 
-      // fenced code
-      s = s.replace(/```([\s\S]*?)```/g, (m, code)=>`<pre><code>${code.replace(/^\n+|\n+$/g,'')}</code></pre>\n`);
+      // Headings should start on their own line + have a space after hashes
+      s = s.replace(/([^\n])(\#{1,6})(?=\s)/g, '$1\n$2');
+      s = s.replace(/^(\#{1,6})([^\s#])/gm, '$1 $2');
 
-      // headings
-      s = s.replace(/^###\s+(.*)$/gm, (_m, h)=>`<h3>${h.trim()}</h3>\n`);
-      s = s.replace(/^##\s+(.*)$/gm,  (_m, h)=>`<h2>${h.trim()}</h2>\n`);
-      s = s.replace(/^#\s+(.*)$/gm,   (_m, h)=>`<h1>${h.trim()}</h1>\n`);
+      // Heal long/fused heading lines (split into heading + first sentence/phrase)
+      s = s.replace(/^(#{1,6}\s+)([^\n]+)$/gm, (_m, hashes, raw) => {
+        let t = raw.trim();
 
-      // inline marks
-      s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-      s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
-      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+        // Fix MidCaps joins (e.g., MattersReading -> Matters Reading)
+        t = t.replace(/([a-z])([A-Z])/g, '$1 $2');
 
-      // ordered lists
-      s = s.replace(
-        /(^|\n)(?:\s*\d+\.\s.+(?:\n(?!\n)|$))+?/g,
-        block => {
-          const items = block.replace(/^\s*\d+\.\s+(.*)$/gm, '<li>$1</li>').trim();
-          return `\n<ol>${items}</ol>\n`;
+        // Prefer sentence punctuation; else split by length/word count
+        let cut = t.search(/[.!?](\s|$)/);
+        if (cut === -1 && t.includes(',')) cut = t.indexOf(',');
+        if (cut === -1 && (t.length > 70 || t.split(/\s+/).length > 12)) {
+          const words = t.split(/\s+/);
+          const head = words.slice(0, 10).join(' ');
+          const rest = words.slice(10).join(' ').trim();
+          return rest ? `${hashes}${head}\n${rest}` : `${hashes}${head}`;
         }
-      );
-
-      // unordered lists
-      s = s.replace(
-        /(^|\n)(?:\s*[-*]\s.+(?:\n(?!\n)|$))+?/g,
-        block => {
-          const items = block.replace(/^\s*[-*]\s+(.*)$/gm, '<li>$1</li>').trim();
-          return `\n<ul>${items}</ul>\n`;
+        if (cut > 0) {
+          const head = t.slice(0, cut).trim();
+          const rest = t.slice(cut).replace(/^[,.\s]+/, '').trim();
+          return rest ? `${hashes}${head}\n${rest}` : `${hashes}${head}`;
         }
-      );
+        return `${hashes}${t}`;
+      });
 
-      // collapse extra blank lines
-      s = s.replace(/\n{3,}/g, '\n\n');
+      // Ensure a blank line after headings so the next sentence becomes a paragraph
+      s = s.replace(/^(#{1,6}\s+[^\n]+)\n(?!\n|#{1,6}|\-|>|\*|\d+\.)/gm, '$1\n\n');
 
-      // paragraphize leftovers (skip block tags)
-      s = s.replace(
-        /(^|\n)([^\n<].*)/g,
-        (m, a, b) => (/^\s*<(h\d|ul|ol|li|\/ul|\/ol|pre|code|\/pre|\/code)>/i.test(b) ? m : `${a}<p>${b}</p>`)
-      );
+      // Ordered lists "1) " -> "1. "
+      s = s.replace(/^\s*(\d+)\)\s+/gm, '$1. ');
 
-      // de-bold long spans
-      s = s.replace(/<strong>([^<]{140,})<\/strong>/g, '$1');
+      // Bullets jammed after punctuation/heading -> newline bullet
+      s = s.replace(/([.:;])\s*[-•]\s+/g, '$1\n- ');
+      s = s.replace(/:\s*-\s+/g, ':\n- ');
+      s = s.replace(/^(#{1,6}\s+[^\n]*?)\s*[-•]\s+/gm, '$1\n- ');
+      s = s.replace(/\n\s*[-•]\s+/g, '\n- ');
 
-      return s.trim();
+      // Labels (Template:, Example:, etc.) always start a new line
+      const lbl = '(Action Step:|Action Steps:|Example:|Examples:|Template:|Templates:|Options?:|Pro tip:|Pro Tip:|Note:|Notes:|Key Takeaway:|Bottom line:)';
+      s = s.replace(new RegExp(`^(#{1,6}\\s+[^\\n]*?)\\s*${lbl}`, 'gmi'), (_m, h, L) => `${h}\n${L}`);
+      s = s.replace(new RegExp(`([.!?])\\s*${lbl}`, 'g'), (_m, end, L) => `${end}\n${L}`);
+
+      // If a naked number is on its own line, merge it with the next line: "2" -> "2. Next…"
+      s = s.replace(/\n(\d{1,2})\s*\n(?=[A-Z0-9])/g, (_m, n) => `\n${n}. `);
+
+      // Streaming safety: if the buffer ends with a heading, pad a newline
+      s = s.replace(/(^|\n)(\s{0,3}#{1,6}\s+[^\n]*)$/, '$1$2\n');
+
+      return s;
     }
+
+    /* ---------- Parser + post-HTML fix for overlong headings ---------- */
+    function renderMarkdown(mdText = '') {
+      const normalized = normalizeMarkdown(mdText);
+
+      if (!renderMarkdown._configured) {
+        marked.setOptions({ gfm: true, breaks: false, headerIds: false, mangle: false });
+        renderMarkdown._configured = true;
+      }
+
+      let html = marked.parse(normalized);
+      html = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+
+      // Post-process: if a heading is suspiciously long *and* has no punctuation,
+      // split it into <hX>Title</hX><p>rest…</p>
+      const host = document.createElement('div');
+      host.innerHTML = html;
+      host.querySelectorAll('h1, h2, h3').forEach(h => {
+        const t = (h.textContent || '').trim();
+        if (t.length <= 80 || /[.!?]/.test(t)) return;
+        const words = t.split(/\s+/);
+        if (words.length < 12) return;
+        const head = words.slice(0, 10).join(' ');
+        const rest = words.slice(10).join(' ').trim();
+        if (!rest) return;
+        h.textContent = head;
+        const p = document.createElement('p');
+        p.textContent = rest;
+        h.insertAdjacentElement('afterend', p);
+      });
+
+      // Reduce shouty bold blocks
+      host.innerHTML = host.innerHTML.replace(/<strong>([^<]{140,})<\/strong>/g, '$1');
+
+      return host.innerHTML.trim();
+    }
+
+
+
+    // Parser-based renderer using marked + DOMPurify
+    function renderMarkdown(mdText = '') {
+      const normalized = normalizeMarkdown(mdText);
+
+      if (!renderMarkdown._configured) {
+        marked.setOptions({
+          gfm: true,
+          breaks: false,     // paragraphs, not <br> for single newline
+          headerIds: false,
+          mangle: false
+        });
+        renderMarkdown._configured = true;
+      }
+
+      let html = marked.parse(normalized);
+      html = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+
+      // Reduce shouty bold blocks
+      html = html.replace(/<strong>([^<]{140,})<\/strong>/g, '$1');
+
+      return html.trim();
+    }
+
 
     function decorateCodeCopies(container){
       container.querySelectorAll('pre').forEach(pre=>{
@@ -552,7 +552,7 @@ INSTRUCTIONS:
         const edit = document.createElement('button'); edit.textContent = '✏️ Edit & Resend';
         edit.addEventListener('click', ()=>{
           const text = row.querySelector('.message-content').innerText;
-          messageInput.value = text; messageInput.focus(); row.remove(); saveChat();
+          messageInput.value = text; messageInput.focus(); row.remove(); saveChatDebounced();
         });
         bar.appendChild(edit);
       }else{
@@ -589,71 +589,128 @@ INSTRUCTIONS:
       if (!isUser) addReactions(bubble);
       if (!isUser) decorateCodeCopies(bubble);
       if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
-      saveChat();
+      saveChatDebounced();
       return bubble;
     }
 
-    // STREAM + typing dots + stop
+    // STREAM: POST ReadableStream with SSE fallback
     let currentES = null;
+    let controllerAbort = null;
     let lastUserPrompt = '';
-    async function streamBotResponse(userMessage, opts, targetBubble){
-      return new Promise((resolve)=>{
-        const q = new URLSearchParams({ message:userMessage, tone:opts.tone, length:opts.length });
-        const es = new EventSource(`/api/stream?${q.toString()}`);
-        currentES = es; stopBtn.disabled = false;
 
-        let buffer = ''; let raf = false;
+    async function streamBotResponse(userMessage, opts, targetBubble){
+      // Try POST streaming first (why: avoid leaking long prompts in URLs).
+      try{
+        const ac = new AbortController();
+        controllerAbort = ac;
+        stopBtn.disabled = false;
+
         targetBubble.innerHTML = `
-          <div class="typing-wrap">
+          <div class="typing-wrap" role="status" aria-live="polite">
             <span>Hanza is typing</span>
             <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
           </div>
         `;
 
-        const flush = ()=>{
-          if (!buffer) { raf = false; return; }
-          // TEMPORARY padding: if buffer currently ends with a heading line, add a newline
-          // so the renderer treats it as a heading (prevents swallowing next text).
-          let view = buffer.replace(/(^|\n)(\s{0,3}#{1,6}\s+[^\n]*)$/,'$1$2\n');
+        const res = await fetch('/api/stream', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ message:userMessage, tone:opts.tone, length:opts.length }),
+          signal: ac.signal
+        });
+
+        if (!res.ok || !res.body) throw new Error('no-stream');
+
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buffer = '';
+        let view = '';
+
+        const pump = async () => {
+          const { value, done } = await reader.read();
+          if (done) return;
+          buffer += dec.decode(value, { stream:true });
+          // split on newlines, flush quickly
+          view = buffer.replace(/(^|\n)(\s{0,3}#{1,6}\s+[^\n]*)$/,'$1$2\n');
           targetBubble.innerHTML = renderMarkdown(view);
           decorateCodeCopies(targetBubble);
           if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
-          saveChat(); raf = false;
+          saveChatDebounced();
+          if (buffer.includes('[DONE]')) return;
+          return pump();
         };
 
-        es.onmessage = (e)=>{
-          if (e.data === '[DONE]'){
-            es.close(); currentES = null; stopBtn.disabled = true;
-            // final render (no padding)
-            if (buffer){
+        await pump();
+
+        stopBtn.disabled = true; controllerAbort = null;
+        // final cleanup
+        targetBubble.innerHTML = renderMarkdown(buffer.replace('[DONE]',''));
+        decorateCodeCopies(targetBubble);
+        if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
+        saveChatDebounced();
+        return;
+      }catch(e){
+        // Fallback to SSE if POST streaming not supported
+        try{
+          const q = new URLSearchParams({ message:userMessage, tone:opts.tone, length:opts.length });
+          const es = new EventSource(`/api/stream?${q.toString()}`);
+          currentES = es; stopBtn.disabled = false;
+
+          let buffer = ''; let raf = false;
+          targetBubble.innerHTML = `
+            <div class="typing-wrap" role="status" aria-live="polite">
+              <span>Hanza is typing</span>
+              <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+            </div>
+          `;
+
+          const flush = ()=>{
+            if (!buffer) { raf = false; return; }
+            const view = buffer.replace(/(^|\n)(\s{0,3}#{1,6}\s+[^\n]*)$/,'$1$2\n');
+            targetBubble.innerHTML = renderMarkdown(view);
+            decorateCodeCopies(targetBubble);
+            if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
+            saveChatDebounced(); raf = false;
+          };
+
+          es.onmessage = (ev)=>{
+            if (ev.data === '[DONE]'){
+              es.close(); currentES = null; stopBtn.disabled = true;
               targetBubble.innerHTML = renderMarkdown(buffer);
               decorateCodeCopies(targetBubble);
               if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
-              saveChat();
+              saveChatDebounced();
+              return;
             }
-            resolve(); return;
-          }
-          buffer += e.data;
-          if (!raf){ raf = true; requestAnimationFrame(flush); }
-        };
-        es.onerror = ()=>{
-          es.close(); currentES = null; stopBtn.disabled = true;
-          if (!buffer){ targetBubble.textContent = "⚠️ Streaming failed. Try again."; saveChat(); }
-          resolve();
-        };
-      });
+            buffer += ev.data;
+            if (!raf){ raf = true; requestAnimationFrame(flush); }
+          };
+          es.onerror = ()=>{
+            es.close(); currentES = null; stopBtn.disabled = true;
+            if (!buffer){ targetBubble.textContent = "⚠️ Streaming failed. Try again."; saveChatDebounced(); }
+          };
+        }catch{
+          stopBtn.disabled = true;
+          targetBubble.textContent = "⚠️ Streaming unavailable.";
+          saveChatDebounced();
+        }
+      }
     }
+
     stopBtn.addEventListener('click', ()=>{
-      if (currentES){ currentES.close(); currentES = null; stopBtn.disabled = true; showToast('Stopped'); }
+      if (currentES){ currentES.close(); currentES = null; }
+      if (controllerAbort){ controllerAbort.abort(); controllerAbort = null; }
+      stopBtn.disabled = true; showToast('Stopped');
     });
 
     function currentOptions(){ return { tone: toneSel.value, length: lengthSel.value }; }
 
     // Auto-title helpers
     function setSessionTitle(txt){
-      sessionTitle.textContent = txt;
-      sessionTitle.setAttribute('title', txt);
-      localStorage.setItem(TITLE_KEY, txt);
+      const cap = txt.slice(0, 80);
+      sessionTitle.textContent = cap;
+      sessionTitle.setAttribute('title', cap);
+      safeSet(TITLE_KEY, cap);
     }
     function maybeAutoTitleFrom(msg){
       const existing = (sessionTitle.textContent || '').replace('Rename','').trim();
@@ -664,6 +721,7 @@ INSTRUCTIONS:
     }
     editTitleBtn.addEventListener('click', ()=>{
       sessionTitle.setAttribute('contenteditable','true');
+      sessionTitle.setAttribute('aria-label','Editing chat name, press Enter to save');
       const range = document.createRange(); range.selectNodeContents(sessionTitle);
       const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); sessionTitle.focus();
     });
@@ -709,13 +767,11 @@ INSTRUCTIONS:
 
     // Auto-scroll lock
     let autoScroll = true;
-    function atBottom(){
-      return chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 8;
-    }
+    const atBottom = ()=> chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 8;
     chatMessages.addEventListener('scroll', ()=>{
       autoScroll = atBottom();
       toLatestBtn.style.display = autoScroll ? 'none' : 'block';
-    });
+    }, { passive:true });
     toLatestBtn.addEventListener('click', ()=>{
       chatMessages.scrollTop = chatMessages.scrollHeight;
       autoScroll = true; toLatestBtn.style.display='none';
@@ -743,7 +799,7 @@ INSTRUCTIONS:
     sendButton.addEventListener('click', handleSend);
     messageInput.addEventListener('keypress', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); } });
 
-    // ------- History drawer (Open / Download / Delete / Jump Back In) + Search -------
+    // ------- History drawer -------
     async function loadHistory(){
       historyList.innerHTML = '<div class="meta" style="padding:12px;">Loading…</div>';
       try{
@@ -854,7 +910,7 @@ INSTRUCTIONS:
 
     confirmSave.addEventListener('click', async ()=>{
       const pretty = convName.value.trim() || defaultTitle();
-      const title  = slugifyName(pretty);
+      const title  = slugifyName(pretty).slice(0, 80);
       try{
         const transcript = collectTranscript();
         const r = await fetch('/api/save',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ transcript, format:'pdf', title }) });
@@ -869,7 +925,9 @@ INSTRUCTIONS:
 
     // New Chat
     newBtn.addEventListener('click', ()=>{
-      if (currentES){ currentES.close(); currentES = null; stopBtn.disabled = true; }
+      if (currentES){ currentES.close(); currentES = null; }
+      if (controllerAbort){ controllerAbort.abort(); controllerAbort = null; }
+      stopBtn.disabled = true;
       chatMessages.innerHTML = `
         <div class="message bot">
           <div class="message-content">
@@ -878,7 +936,7 @@ INSTRUCTIONS:
           </div>
         </div>`;
       setSessionTitle('Untitled Session');
-      saveChat(); showToast('New chat started'); messageInput.focus();
+      saveChatDebounced(); showToast('New chat started'); messageInput.focus();
     });
 
     // Focus input on load
