@@ -22,7 +22,7 @@ const PUBLIC_DIR   = path.join(__dirname, "public");
 const DATA_DIR     = path.join(__dirname, "data");
 const SRC_DIR      = path.join(DATA_DIR, "sources");
 const INDEX_FILE   = path.join(DATA_DIR, "index.json");
-const STYLE_FILE   = path.join(PUBLIC_DIR, "style_guide.md");
+const STYLE_FILE   = path.join(PUBLIC_DIR, "assets", "style_guide.md");
 const TRANSCRIPTS  = path.join(DATA_DIR, "transcripts");
 
 // Ensure dirs
@@ -241,7 +241,9 @@ app.post("/api/chat", async (req, res) => {
 
     if (DEMO) return res.json({ reply: demoDraft(message, tone, length) });
 
-    const retrieved = await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
+    // Skip server retrieval if client already stuffed context
+    const clientStuffed = /CONTEXT EXCERPTS:/i.test(message);
+    const retrieved = clientStuffed ? [] : await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -290,7 +292,19 @@ app.get("/api/stream", async (req, res) => {
 
     if (DEMO) return streamDemoDraft(res, message, tone, length);
 
-    const retrieved = await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
+    const clientStuffed = /CONTEXT EXCERPTS:/i.test(message);
+    const retrieved = clientStuffed ? [] : await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
+
+    // --- NEW: Abort upstream call if the client disconnects
+    const ac = new AbortController();
+    const { signal } = ac;
+    req.on("close", () => {
+      try { ac.abort(); } catch {}
+      try {
+        res.write(`data: [DONE]\n\n`);
+        res.end();
+      } catch {}
+    });
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -304,7 +318,8 @@ app.get("/api/stream", async (req, res) => {
         temperature: 0.7,
         max_tokens: 1700,
         stream: true
-      })
+      }),
+      signal
     });
 
     if (!resp.ok || !resp.body) {
@@ -339,9 +354,10 @@ app.get("/api/stream", async (req, res) => {
         try {
           const json = JSON.parse(data);
           const token = json.choices?.[0]?.delta?.content || "";
-          if (token) res.write(`data: ${escapeSSE(token)}n\n`.replace('n\n', '\n\n')); // tiny normalize safeguard
+          // --- NEW: simple, robust token write
+          if (token) res.write(`data: ${escapeSSE(token)}\n\n`);
         } catch {
-          // ignore keep-alives
+          // ignore keep-alives / non-JSON lines
         }
       }
     }
@@ -465,24 +481,16 @@ app.delete("/api/transcripts/:file", (req, res) => {
   }
 });
 
-// ---- BEGIN: sources endpoint ----
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = path.dirname(__filename);
-
-app.get('/api/sources', async (req, res) => {
+// ---- BEGIN: sources endpoint (clean) ----
+app.get('/api/sources', async (_req, res) => {
   try {
-    const dir = path.join(__dirname, 'data', 'sources');
-    const files = (await fs.promises.readdir(dir))
+    const files = (await fs.promises.readdir(SRC_DIR))
       .filter(f => /\.(txt|md)$/i.test(f))
-      .sort(); // alphabetical
+      .sort();
 
     const items = await Promise.all(
       files.map(async (name) => {
-        const text = await fs.promises.readFile(path.join(dir, name), 'utf8');
+        const text = await fs.promises.readFile(path.join(SRC_DIR, name), 'utf8');
         return { name, text };
       })
     );
@@ -494,7 +502,6 @@ app.get('/api/sources', async (req, res) => {
   }
 });
 // ---- END: sources endpoint ----
-
 
 // ====== start ======
 app.listen(PORT, () => {
