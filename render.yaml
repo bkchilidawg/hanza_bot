@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: hanza-bot
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: "npm ci"
+    # If you want to rebuild the RAG index during deploy, use:
+    # buildCommand: "npm ci && npm run build:index"
+    startCommand: "npm start"
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_EMBED_MODEL
+        value: text-embedding-3-small
+      - key: DEMO_MODE
+        value: "false"
