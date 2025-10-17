@@ -12,7 +12,7 @@ const __dirname  = path.dirname(__filename);
 
 const app   = express();
 const PORT  = process.env.PORT || 3000;
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const MODEL = process.env.OPENAI_MODEL || "gpt-5-nano";
 const DEMO  = String(process.env.DEMO_MODE || "").toLowerCase() === "true";
 
 const EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small";
