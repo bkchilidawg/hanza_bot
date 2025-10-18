@@ -1,4 +1,4 @@
-<!-- /public/index.html -->
+<!-- /public/index.html — minimal client; sends raw user text; no style guide / sources -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,7 +30,6 @@
       display:flex; flex-direction:column; overflow:hidden;
       position:relative;
     }
-    /* Header */
     .chat-header{
       background: linear-gradient(135deg, var(--brand1) 0%, var(--brand2) 100%);
       color:white; padding:10px 16px; font-size:18px; font-weight:700;
@@ -106,13 +105,9 @@
     .message.bot .message-content h1{ font-size:24px; font-weight:800; line-height:1.25; margin:0 0 10px; }
     .message.bot .message-content h2{ font-size:18px; font-weight:700; line-height:1.3; margin:16px 0 8px; }
     .message.bot .message-content h3{ font-size:16px; font-weight:700; line-height:1.35; margin:16px 0 6px; }
-    .message.bot .message-content h1 + p,
-    .message.bot .message-content h2 + p,
-    .message.bot .message-content h3 + p{ margin-top:6px; }
     .message.bot .message-content p{ margin:10px 0; font-weight:400; }
     .message.bot .message-content ul,
     .message.bot .message-content ol{ margin: 8px 0 12px 1.15rem; padding: 0; }
-    .message.bot .message-content strong{ font-weight:600; }
     .message.bot .message-content li{ margin: 4px 0; }
     .message.bot .message-content code{ background:var(--code-bg); border:1px solid var(--code-bd); padding:2px 5px; border-radius:6px; }
     .message.bot .message-content pre{ background:#f6f6f6; border:1px solid #eee; border-radius:10px; padding:10px; overflow:auto; margin:10px 0; }
@@ -223,12 +218,10 @@
       </div>
     </div>
 
-    <!-- ARIA: live log for streaming updates -->
     <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" aria-relevant="additions text">
       <div class="message bot">
         <div class="message-content">
-          👋 Hi Hanza! I'm your AI assistant for writing blog posts in your voice and style.
-          Choose a <strong>Tone</strong> and <strong>Length</strong>, then ask me to create, brainstorm, or polish a post.
+          👋 Hi! I'm your writing assistant. Pick a <strong>Tone</strong> and <strong>Length</strong>, then ask me to create, brainstorm, or polish a post.
           <div class="note">Tip: Enter to send, Shift+Enter for a new line. Type <code>/</code> for quick presets.</div>
         </div>
       </div>
@@ -308,11 +301,9 @@
 
     const slashMenu    = document.getElementById('slashMenu');
 
-    // Avatar fallback (why: avoid broken image UI)
     avatar.addEventListener('error', () => {
       const badge = document.createElement('div');
       badge.textContent = 'HS';
-      badge.setAttribute('aria-label','Hanza Stephens');
       Object.assign(badge.style, {
         width:'72px', height:'72px', borderRadius:'50%', display:'grid', placeItems:'center',
         background:'rgba(255,255,255,.2)', color:'#fff',
@@ -325,7 +316,6 @@
     const CHAT_KEY = 'hanza_chat_v5';
     const SETTINGS_KEY = 'hanza_settings_v1';
     const TITLE_KEY = 'hanza_title_v1';
-
     const safeSet = (k,v)=>{ try{ localStorage.setItem(k,v); }catch{} };
     const safeGet = (k)=>{ try{ return localStorage.getItem(k); }catch{ return null; } };
 
@@ -340,10 +330,7 @@
     setSessionTitle(savedTitle);
 
     let saveTimer = null;
-    function saveChatDebounced(){
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(()=> safeSet(CHAT_KEY, chatMessages.innerHTML), 600);
-    }
+    function saveChatDebounced(){ clearTimeout(saveTimer); saveTimer = setTimeout(()=> safeSet(CHAT_KEY, chatMessages.innerHTML), 600); }
     function saveSettings(){ safeSet(SETTINGS_KEY, JSON.stringify({ tone: toneSel.value, length: lengthSel.value })); }
     toneSel.addEventListener('change', saveSettings);
     lengthSel.addEventListener('change', saveSettings);
@@ -356,67 +343,14 @@
       maybeShowSlashMenu();
     });
 
-    // --- Context preload (style + sources) ---
-    let STYLE_GUIDE = '';
-    let SOURCES = [];
-
-    async function preloadContext() {
-      if (!STYLE_GUIDE) {
-        try {
-          const r = await fetch('/assets/style_guide.md');
-          STYLE_GUIDE = await r.text();
-        } catch {}
-      }
-      if (!SOURCES.length) {
-        try {
-          const r = await fetch('/api/sources');
-          const j = await r.json();
-          if (j?.ok) SOURCES = j.items;
-        } catch {}
-      }
-    }
-
-    function buildContextPrompt(userPrompt) {
-      const perFile = 1200;
-      const maxTotal = 8000;
-      let ctx = '';
-      for (const it of SOURCES) {
-        const chunk = (it.text || '').slice(0, perFile);
-        if (!chunk.trim()) continue;
-        ctx += `\n\n### Source: ${it.name}\n${chunk}`;
-        if (ctx.length > maxTotal) break;
-      }
-      const guide = STYLE_GUIDE ? `VOICE & STYLE (verbatim):\n${STYLE_GUIDE}\n` : '';
-      const instructions = `
-INSTRUCTIONS:
-- Write in Hanza's voice & style above.
-- Calm, strategic, practical. Clear frameworks, real steps.
-- Use Markdown: # title, ## sections, bullets.
-- Give 3–5 action steps with an example or template.
-- Include: one-sentence outcome, one metric that proves progress, a 7-day experiment.
-- Finish with a decisive takeaway line (see sample sign-off).
-`.trim();
-
-      return `${guide}${ctx ? `\n\nCONTEXT EXCERPTS:\n${ctx}\n` : ''}\n${instructions}\n\n---\n\nUSER REQUEST:\n${userPrompt}`;
-    }
-
-    /* === Markdown: normalize -> marked -> sanitize === */
-    /* ---------- Markdown normalizer ---------- */
+    /* ---------- Markdown: normalize -> marked -> sanitize ---------- */
     function normalizeMarkdown(md = '') {
       let s = (md || '').replace(/\r\n?/g, '\n');
-
-      // Headings should start on their own line + have a space after hashes
       s = s.replace(/([^\n])(\#{1,6})(?=\s)/g, '$1\n$2');
       s = s.replace(/^(\#{1,6})([^\s#])/gm, '$1 $2');
-
-      // Heal long/fused heading lines (split into heading + first sentence/phrase)
       s = s.replace(/^(#{1,6}\s+)([^\n]+)$/gm, (_m, hashes, raw) => {
         let t = raw.trim();
-
-        // Fix MidCaps joins (e.g., MattersReading -> Matters Reading)
         t = t.replace(/([a-z])([A-Z])/g, '$1 $2');
-
-        // Prefer sentence punctuation; else split by length/word count
         let cut = t.search(/[.!?](\s|$)/);
         if (cut === -1 && t.includes(',')) cut = t.indexOf(',');
         if (cut === -1 && (t.length > 70 || t.split(/\s+/).length > 12)) {
@@ -432,47 +366,24 @@ INSTRUCTIONS:
         }
         return `${hashes}${t}`;
       });
-
-      // Ensure a blank line after headings so the next sentence becomes a paragraph
       s = s.replace(/^(#{1,6}\s+[^\n]+)\n(?!\n|#{1,6}|\-|>|\*|\d+\.)/gm, '$1\n\n');
-
-      // Ordered lists "1) " -> "1. "
       s = s.replace(/^\s*(\d+)\)\s+/gm, '$1. ');
-
-      // Bullets jammed after punctuation/heading -> newline bullet
       s = s.replace(/([.:;])\s*[-•]\s+/g, '$1\n- ');
       s = s.replace(/:\s*-\s+/g, ':\n- ');
       s = s.replace(/^(#{1,6}\s+[^\n]*?)\s*[-•]\s+/gm, '$1\n- ');
       s = s.replace(/\n\s*[-•]\s+/g, '\n- ');
-
-      // Labels (Template:, Example:, etc.) always start a new line
-      const lbl = '(Action Step:|Action Steps:|Example:|Examples:|Template:|Templates:|Options?:|Pro tip:|Pro Tip:|Note:|Notes:|Key Takeaway:|Bottom line:)';
-      s = s.replace(new RegExp(`^(#{1,6}\\s+[^\\n]*?)\\s*${lbl}`, 'gmi'), (_m, h, L) => `${h}\n${L}`);
-      s = s.replace(new RegExp(`([.!?])\\s*${lbl}`, 'g'), (_m, end, L) => `${end}\n${L}`);
-
-      // If a naked number is on its own line, merge it with the next line: "2" -> "2. Next…"
       s = s.replace(/\n(\d{1,2})\s*\n(?=[A-Z0-9])/g, (_m, n) => `\n${n}. `);
-
-      // Streaming safety: if the buffer ends with a heading, pad a newline
       s = s.replace(/(^|\n)(\s{0,3}#{1,6}\s+[^\n]*)$/, '$1$2\n');
-
       return s;
     }
-
-    /* ---------- Parser + post-HTML fix for overlong headings ---------- */
     function renderMarkdown(mdText = '') {
       const normalized = normalizeMarkdown(mdText);
-
       if (!renderMarkdown._configured) {
         marked.setOptions({ gfm: true, breaks: false, headerIds: false, mangle: false });
         renderMarkdown._configured = true;
       }
-
       let html = marked.parse(normalized);
       html = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
-
-      // Post-process: if a heading is suspiciously long *and* has no punctuation,
-      // split it into <hX>Title</hX><p>rest…</p>
       const host = document.createElement('div');
       host.innerHTML = html;
       host.querySelectorAll('h1, h2, h3').forEach(h => {
@@ -488,39 +399,9 @@ INSTRUCTIONS:
         p.textContent = rest;
         h.insertAdjacentElement('afterend', p);
       });
-
-      // Reduce shouty bold blocks
       host.innerHTML = host.innerHTML.replace(/<strong>([^<]{140,})<\/strong>/g, '$1');
-
       return host.innerHTML.trim();
     }
-
-
-
-    // Parser-based renderer using marked + DOMPurify
-    function renderMarkdown(mdText = '') {
-      const normalized = normalizeMarkdown(mdText);
-
-      if (!renderMarkdown._configured) {
-        marked.setOptions({
-          gfm: true,
-          breaks: false,     // paragraphs, not <br> for single newline
-          headerIds: false,
-          mangle: false
-        });
-        renderMarkdown._configured = true;
-      }
-
-      let html = marked.parse(normalized);
-      html = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
-
-      // Reduce shouty bold blocks
-      html = html.replace(/<strong>([^<]{140,})<\/strong>/g, '$1');
-
-      return html.trim();
-    }
-
-
     function decorateCodeCopies(container){
       container.querySelectorAll('pre').forEach(pre=>{
         if (pre.querySelector('.code-copy')) return;
@@ -545,7 +426,6 @@ INSTRUCTIONS:
       });
       bubble.appendChild(bar);
     }
-
     function addBubbleActions(row, isUser){
       const bar = document.createElement('div'); bar.className = 'bubble-actions';
       if (isUser){
@@ -557,9 +437,9 @@ INSTRUCTIONS:
         bar.appendChild(edit);
       }else{
         const regen = document.createElement('button'); regen.textContent = '🔄 Regenerate';
-        regen.addEventListener('click', ()=>{ if (lastUserPrompt) sendWithPrompt(lastUserPrompt, true); });
+        regen.addEventListener('click', ()=>{ if (lastUserPrompt) sendWithPrompt(lastUserPrompt); });
         const cont = document.createElement('button'); cont.textContent = '➡️ Continue';
-        cont.addEventListener('click', ()=> sendWithPrompt('Continue.', false));
+        cont.addEventListener('click', ()=> sendWithPrompt('Continue.'));
         bar.appendChild(regen); bar.appendChild(cont);
       }
       row.appendChild(bar);
@@ -593,17 +473,38 @@ INSTRUCTIONS:
       return bubble;
     }
 
-    // STREAM: POST ReadableStream with SSE fallback
+    // STREAM: POST ReadableStream with SSE fallback (server pseudo-streams for GPT-5)
     let currentES = null;
     let controllerAbort = null;
     let lastUserPrompt = '';
 
     async function streamBotResponse(userMessage, opts, targetBubble){
-      // Try POST streaming first (why: avoid leaking long prompts in URLs).
-      try{
+      const write = (buf) => {
+        targetBubble.innerHTML = renderMarkdown(buf);
+        decorateCodeCopies(targetBubble);
+        if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
+        saveChatDebounced();
+      };
+
+      function extractText(payload){
+        if (!payload) return '';
+        if (payload[0] !== '{') return payload;
+        try {
+          const j = JSON.parse(payload);
+          if (j.type === 'response.output_text.delta' && typeof j.delta === 'string') return j.delta;
+          if (j.type === 'message.delta' && j.delta?.content?.length) {
+            return j.delta.content.map(c => c.text || c).join('');
+          }
+          const cc = j.choices?.[0]?.delta?.content;
+          if (typeof cc === 'string') return cc;
+          return '';
+        } catch { return ''; }
+      }
+
+      try {
         const ac = new AbortController();
         controllerAbort = ac;
-        stopBtn.disabled = false;
+        stopBtn.disabled = true;
 
         targetBubble.innerHTML = `
           <div class="typing-wrap" role="status" aria-live="polite">
@@ -613,50 +514,61 @@ INSTRUCTIONS:
         `;
 
         const res = await fetch('/api/stream', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ message:userMessage, tone:opts.tone, length:opts.length }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+          body: JSON.stringify({ message: userMessage, tone: opts.tone, length: opts.length }),
           signal: ac.signal
         });
+        if (!res.ok || !res.body) throw new Error('no-post-stream');
 
-        if (!res.ok || !res.body) throw new Error('no-stream');
+        stopBtn.disabled = false;
 
         const reader = res.body.getReader();
-        const dec = new TextDecoder();
-        let buffer = '';
-        let view = '';
+        const dec = new TextDecoder('utf-8');
+        let sseBuf = '';
+        let out    = '';
+        let done   = false;
 
-        const pump = async () => {
-          const { value, done } = await reader.read();
-          if (done) return;
-          buffer += dec.decode(value, { stream:true });
-          // split on newlines, flush quickly
-          view = buffer.replace(/(^|\n)(\s{0,3}#{1,6}\s+[^\n]*)$/,'$1$2\n');
-          targetBubble.innerHTML = renderMarkdown(view);
-          decorateCodeCopies(targetBubble);
-          if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
-          saveChatDebounced();
-          if (buffer.includes('[DONE]')) return;
-          return pump();
-        };
+        const tick = () => write(out);
 
-        await pump();
+        while (true) {
+          const { value, done: rd } = await reader.read();
+          if (rd) break;
 
-        stopBtn.disabled = true; controllerAbort = null;
-        // final cleanup
-        targetBubble.innerHTML = renderMarkdown(buffer.replace('[DONE]',''));
-        decorateCodeCopies(targetBubble);
-        if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
-        saveChatDebounced();
+          sseBuf += dec.decode(value, { stream: true });
+          const frames = sseBuf.split(/\r?\n\r?\n/);
+          sseBuf = frames.pop() || '';
+
+          for (const frame of frames) {
+            const lines = frame.split(/\r?\n/).filter(l => l.startsWith('data:'));
+            for (const line of lines) {
+              const payload = line.slice(5).trim();
+              if (payload === '[DONE]') { done = true; break; }
+              const text = extractText(payload);
+              if (text) out += text;
+            }
+            if (done) break;
+          }
+
+          tick();
+          if (done) break;
+        }
+
+        controllerAbort = null;
+        stopBtn.disabled = true;
+        tick();
         return;
-      }catch(e){
-        // Fallback to SSE if POST streaming not supported
-        try{
-          const q = new URLSearchParams({ message:userMessage, tone:opts.tone, length:opts.length });
+      } catch {
+        // GET fallback
+        try {
+          const q = new URLSearchParams({ message: userMessage, tone: opts.tone, length: opts.length });
           const es = new EventSource(`/api/stream?${q.toString()}`);
-          currentES = es; stopBtn.disabled = false;
+          currentES = es;
+          stopBtn.disabled = false;
 
-          let buffer = ''; let raf = false;
+          let out = '';
+          let raf = false;
+
           targetBubble.innerHTML = `
             <div class="typing-wrap" role="status" aria-live="polite">
               <span>Hanza is typing</span>
@@ -664,34 +576,24 @@ INSTRUCTIONS:
             </div>
           `;
 
-          const flush = ()=>{
-            if (!buffer) { raf = false; return; }
-            const view = buffer.replace(/(^|\n)(\s{0,3}#{1,6}\s+[^\n]*)$/,'$1$2\n');
-            targetBubble.innerHTML = renderMarkdown(view);
-            decorateCodeCopies(targetBubble);
-            if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
-            saveChatDebounced(); raf = false;
+          const flush = () => { if (!out) { raf = false; return; } write(out); raf = false; };
+
+          es.onmessage = (ev) => {
+            if (ev.data === '[DONE]') {
+              es.close(); currentES = null; stopBtn.disabled = true; flush(); return;
+            }
+            const text = extractText(ev.data);
+            if (text) out += text;
+            if (!raf) { raf = true; requestAnimationFrame(flush); }
           };
 
-          es.onmessage = (ev)=>{
-            if (ev.data === '[DONE]'){
-              es.close(); currentES = null; stopBtn.disabled = true;
-              targetBubble.innerHTML = renderMarkdown(buffer);
-              decorateCodeCopies(targetBubble);
-              if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
-              saveChatDebounced();
-              return;
-            }
-            buffer += ev.data;
-            if (!raf){ raf = true; requestAnimationFrame(flush); }
-          };
-          es.onerror = ()=>{
+          es.onerror = () => {
             es.close(); currentES = null; stopBtn.disabled = true;
-            if (!buffer){ targetBubble.textContent = "⚠️ Streaming failed. Try again."; saveChatDebounced(); }
+            if (!out) { targetBubble.textContent = '⚠️ Streaming failed. Try again.'; saveChatDebounced(); }
           };
-        }catch{
+        } catch {
           stopBtn.disabled = true;
-          targetBubble.textContent = "⚠️ Streaming unavailable.";
+          targetBubble.textContent = '⚠️ Streaming unavailable.';
           saveChatDebounced();
         }
       }
@@ -721,7 +623,6 @@ INSTRUCTIONS:
     }
     editTitleBtn.addEventListener('click', ()=>{
       sessionTitle.setAttribute('contenteditable','true');
-      sessionTitle.setAttribute('aria-label','Editing chat name, press Enter to save');
       const range = document.createRange(); range.selectNodeContents(sessionTitle);
       const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); sessionTitle.focus();
     });
@@ -732,10 +633,10 @@ INSTRUCTIONS:
     });
     sessionTitle.addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ e.preventDefault(); sessionTitle.blur(); } });
 
-    // Slash menu presets
+    // Slash menu presets (just convenience)
     const presets = {
       '/outline': 'Create a blog post outline with H1/H2, bullet points, and a crisp CTA at the end.',
-      '/seo': 'Draft an SEO brief: target keywords, search intent, title ideas, meta description, H2s, and internal link suggestions.',
+      '/seo': 'Draft an SEO brief: target keywords, intent, title ideas, meta description, H2s, and internal links.',
       '/tweet': 'Turn this idea into a 7-tweet thread with hooks and skimmable bullets.',
       '/hooks': 'Give me 10 punchy opening hooks tailored to my audience.',
       '/cta': 'Propose 5 call-to-action options that feel natural and value-led.'
@@ -785,12 +686,8 @@ INSTRUCTIONS:
       sendButton.disabled = true;
 
       lastUserPrompt = prompt;
-
-      await preloadContext();
-      const guidedPrompt = buildContextPrompt(prompt);
-
       const botBubble = addMessage('', false, true);
-      await streamBotResponse(guidedPrompt, currentOptions(), botBubble);
+      await streamBotResponse(prompt, { tone: toneSel.value, length: lengthSel.value }, botBubble);
 
       sendButton.disabled = false;
     }
@@ -799,7 +696,7 @@ INSTRUCTIONS:
     sendButton.addEventListener('click', handleSend);
     messageInput.addEventListener('keypress', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); } });
 
-    // ------- History drawer -------
+    // ------- History drawer (unchanged) -------
     async function loadHistory(){
       historyList.innerHTML = '<div class="meta" style="padding:12px;">Loading…</div>';
       try{
@@ -880,7 +777,7 @@ INSTRUCTIONS:
     refreshBtn.addEventListener('click', loadHistory);
     historySearch.addEventListener('input', applyHistoryFilter);
 
-    // Save modal helpers
+    // Save modal
     function slugifyName(s=''){ return (s.toLowerCase().replace(/[^a-z0-9\s\-_.]/g,'').trim().replace(/\s+/g,'-').replace(/\-+/g,'-') || 'conversation'); }
     function firstUserLine(){ const el = document.querySelector('.message.user .message-content'); return (el?.innerText || '').split('\n').find(Boolean) || ''; }
     function defaultTitle(){
@@ -936,11 +833,15 @@ INSTRUCTIONS:
           </div>
         </div>`;
       setSessionTitle('Untitled Session');
-      saveChatDebounced(); showToast('New chat started'); messageInput.focus();
+      saveChatDebounced(); messageInput.focus();
     });
 
-    // Focus input on load
-    preloadContext().catch(()=>{});
+    // Slash presets
+    const presetsMap = {
+      '/outline': 'Create a blog post outline with H1/H2, bullet points, and a crisp CTA at the end.',
+      '/cta': 'Propose 5 call-to-action options that feel natural and value-led.'
+    };
+
     messageInput.focus();
   </script>
 </body>

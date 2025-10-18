@@ -7,17 +7,16 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "build:index": "node --env-file=.env scripts/build_index.mjs"
+    "build:index": "node --env-file=.env scripts/build_index.mjs",
+    "test:gpt5": "node scripts/verify-gpt5.mjs" 
   },
-  "engines": {
-    "node": ">=20"
-  },
+  "engines": { "node": ">=20" },
   "dependencies": {
+    "compression": "^1.8.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "helmet": "^8.1.0",
     "pdfkit": "^0.17.2"
   },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
-  }
+  "devDependencies": { "nodemon": "^3.1.0" }
 }

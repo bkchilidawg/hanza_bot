@@ -1,9 +1,15 @@
+// server.js
+// GPT-5-nano via /v1/responses (string input), robust extraction, auto-continue,
+// env-tunable token cap + multiplier to approximate "x10 max tokens".
+
 import express from "express";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import PDFDocument from "pdfkit";
+import compression from "compression";
+import helmet from "helmet";
 
 dotenv.config();
 
@@ -12,45 +18,36 @@ const __dirname  = path.dirname(__filename);
 
 const app   = express();
 const PORT  = process.env.PORT || 3000;
-const MODEL = process.env.OPENAI_MODEL || "gpt-5-nano";
+
+/* ---------------- Model normalize ---------------- */
+function normalizeModelId(id) {
+  const s = String(id || "").trim();
+  if (/^gpt[-_]?5([-_]?nano)?$/i.test(s)) return "gpt-5-nano";
+  if (/^gpt[-_]?5/i.test(s)) return s.replace(/_/g, "-").toLowerCase();
+  return s || "gpt-5-nano";
+}
+const MODEL = normalizeModelId(process.env.OPENAI_MODEL || "gpt-5-nano");
 const DEMO  = String(process.env.DEMO_MODE || "").toLowerCase() === "true";
+const DEBUG = !!process.env.DEBUG;
+const HAS_KEY = !!process.env.OPENAI_API_KEY;
+const IS_GPT5 = /^gpt-5/i.test(MODEL);
 
-const EMBED_MODEL = process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small";
-
-// ---- Paths
-const PUBLIC_DIR   = path.join(__dirname, "public");
-const DATA_DIR     = path.join(__dirname, "data");
-const SRC_DIR      = path.join(DATA_DIR, "sources");
-const INDEX_FILE   = path.join(DATA_DIR, "index.json");
-const STYLE_FILE   = path.join(PUBLIC_DIR, "assets", "style_guide.md");
-const TRANSCRIPTS  = path.join(DATA_DIR, "transcripts");
-
-// Ensure dirs
+/* ---------------- Paths ---------------- */
+const PUBLIC_DIR  = path.join(__dirname, "public");
+const DATA_DIR    = path.join(__dirname, "data");
+const TRANSCRIPTS = path.join(DATA_DIR, "transcripts");
 fs.mkdirSync(DATA_DIR, { recursive: true });
-fs.mkdirSync(SRC_DIR,  { recursive: true });
 fs.mkdirSync(TRANSCRIPTS, { recursive: true });
 
+/* ---------------- Middleware ---------------- */
+app.disable("x-powered-by");
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(compression());
 app.use(express.json({ limit: "2mb" }));
 app.use(express.static(PUBLIC_DIR));
-app.use("/transcripts", express.static(TRANSCRIPTS)); // serve PDFs + JSON
+app.use("/transcripts", express.static(TRANSCRIPTS));
 
-// ---- Load style guide once (with a safe cap)
-let STYLE_GUIDE = "";
-try {
-  STYLE_GUIDE = fs.readFileSync(STYLE_FILE, "utf8").slice(0, 8000);
-  console.log("✅ Loaded style guide.");
-} catch { console.warn("ℹ️ No style_guide.md found. (Optional)"); }
-
-// ---- Load RAG index (if available)
-let RAG_INDEX = null;
-try {
-  RAG_INDEX = JSON.parse(fs.readFileSync(INDEX_FILE, "utf8"));
-  console.log(`✅ Loaded RAG index: ${RAG_INDEX.count} chunk(s).`);
-} catch {
-  console.warn("ℹ️ No data/index.json found. Retrieval disabled until you build the index.");
-}
-
-// ===== Utilities =====
+/* ---------------- Utils ---------------- */
 function styleInstruction(tone = "balanced", length = "standard") {
   const toneMap = {
     balanced:      "Use a balanced, approachable professional tone.",
@@ -65,11 +62,10 @@ function styleInstruction(tone = "balanced", length = "standard") {
     concise:  "Target ~600 words. Be tight and focused.",
     standard: "Target ~900 words with clear sections.",
     detailed: "Target 1200–1500 words with rich detail and examples.",
-    ultra:    "Target 2000+ words with exhaustive coverage and case-style depth."
+    ultra:    "Target 2000+ words with exhaustive coverage."
   };
   return `${toneMap[tone] || toneMap.balanced} ${lengthMap[length] || lengthMap.standard}`;
 }
-
 function sseHeaders() {
   return {
     "Content-Type": "text/event-stream",
@@ -78,338 +74,344 @@ function sseHeaders() {
     "X-Accel-Buffering": "no"
   };
 }
-function escapeSSE(s = "") { return s.replace(/\u0000/g, ""); }
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
-function capitalize(s) { return (s || "").charAt(0).toUpperCase() + (s || "").slice(1); }
-
-// ===== DEMO draft for offline mode =====
-function demoDraft(topic, tone, length) {
-  const style = styleInstruction(tone, length);
-  const title = `A Practical Guide to ${capitalize(topic)}`;
-  return [
-    `# ${title}`,
-    ``,
-    `**Style:** ${style}`,
-    ``,
-    `**Overview**`,
-    `In this post, we unpack ${topic} with a focus on practical moves you can apply this week.`,
-    ``,
-    `## Why it matters`,
-    `- Clear business impact`,
-    `- Common traps to avoid`,
-    `- What “good” looks like in practice`,
-    ``,
-    `## 3 actionable steps`,
-    `1) Define the outcome: Write a one-sentence success statement.`,
-    `2) Pick one metric: Choose a single KPI that proves you’re moving.`,
-    `3) Ship a small test: Validate with a no-regret experiment in 7 days.`,
-    ``,
-    `## Quick template`,
-    `- Audience:`,
-    `- Problem:`,
-    `- Desired outcome:`,
-    `- First experiment:`,
-    ``,
-    `**Bottom line:** Start small, measure, iterate.`
-  ].join("\n");
-}
-async function streamDemoDraft(res, topic, tone, length) {
-  const text = demoDraft(topic, tone, length);
-  for (const ch of text) { res.write(`data: ${escapeSSE(ch)}\n\n`); await delay(5); }
-  res.write(`data: [DONE]\n\n`); res.end();
+const escapeSSE = (s="") => String(s).replace(/\u0000/g, "");
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
+function chunkForSSE(text = "", size = 200) {
+  const parts = [];
+  for (let i=0;i<text.length;i+=size) parts.push(text.slice(i, i+size));
+  return parts;
 }
 
-// ====== Retrieval helpers ======
-function cosineSim(a = [], b = []) {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i], y = b[i];
-    dot += x * y;
-    na  += x * x;
-    nb  += y * y;
+// Path safety
+function safeBasename(name="") {
+  const raw = String(name);
+  if (raw.includes("/") || raw.includes("\\")) throw new Error("Invalid filename");
+  return raw.replace(/[^\w.\-]+/g, "_").slice(0, 120);
+}
+function safePathJoin(root, name) {
+  const base = safeBasename(name);
+  const p = path.join(root, base);
+  const rel = path.relative(root, p);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) throw new Error("Unsafe path");
+  return p;
+}
+
+// Extract user's real ask from meta blocks
+function extractUserRequest(raw = "") {
+  const s = String(raw || "");
+  const marker = s.match(/USER REQUEST:\s*([\s\S]*)$/i);
+  if (marker && marker[1]) return marker[1].trim();
+  let cleaned = s
+    .replace(/VOICE\s*&\s*STYLE[\s\S]*?(?:^-{3,}\s*$|\n---\s*\n)/gmi, "")
+    .replace(/CONTEXT\s*EXCERPTS:[\s\S]*?(?:^-{3,}\s*$|\n---\s*\n)/gmi, "")
+    .replace(/^INSTRUCTIONS:[\s\S]*?(?:^-{3,}\s*$|\n---\s*\n)/gmi, "");
+  cleaned = cleaned.trim();
+  return cleaned || s.trim();
+}
+
+/* ---------------- Token budgets (x10-ready) ---------------- */
+// why: allow x10 via env while still clamping to a hard cap
+const MAX_TOKEN_CAP = Math.max(128, Number(process.env.RESP_MAX_TOKENS_CAP || 3500));        // set e.g. 35000
+const TOKEN_MULT    = Math.min(10, Math.max(1, Number(process.env.TOKEN_MULTIPLIER || 1)));  // set 10 for ×10
+const AUTOCONTINUE_ROUNDS = Math.min(20, Math.max(1, Number(process.env.AUTOCONTINUE_ROUNDS || 6)));
+
+function tokensForLength(length = "standard") {
+  switch (String(length)) {
+    case "concise":   return 900;
+    case "standard":  return 1300;
+    case "detailed":  return 2000;
+    case "ultra":     return 3200;
+    default:          return 1500;
   }
-  return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-8);
 }
+function clampTokens(n) { return Math.max(64, Math.min(MAX_TOKEN_CAP, Number.isFinite(n) ? n : 1500)); }
+function applyMultiplier(n) { return clampTokens(Math.round(n * TOKEN_MULT)); }
 
-async function embedText(text) {
-  const r = await fetch("https://api.openai.com/v1/embeddings", {
+/* ---------------- Prompt builders ---------------- */
+function buildMessages(userPrompt, tone, length) {
+  const style = styleInstruction(tone, length);
+  const system =
+    "You are a focused blog-writing assistant. " +
+    "Write clearly in Markdown with # Title and ## Sections, bullets, numbered steps, and practical advice. " +
+    "Avoid emojis unless asked.";
+  return [
+    { role: "system", content: `${system}\n\nStylistic guidance: ${style}` },
+    { role: "user",   content: userPrompt }
+  ];
+}
+function messagesToPlainString(messages = []) {
+  return messages.map(m => {
+    const role = m.role.toUpperCase();
+    const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+    return `${role}:\n${content}`;
+  }).join("\n\n");
+}
+const lastUserText = (messages=[]) =>
+  (messages.findLast?.(m => m.role === "user")?.content) ||
+  [...messages].reverse().find(m => m.role === "user")?.content || "";
+
+/* ---------------- OpenAI (Responses) ---------------- */
+function formatOpenAIError(status, bodyText) {
+  try {
+    const j = JSON.parse(bodyText);
+    const msg = j?.error?.message || j?.message || bodyText;
+    return `OpenAI error ${status}: ${msg}`;
+  } catch {
+    return `OpenAI error ${status}: ${bodyText || "(no body)"}`;
+  }
+}
+async function fetchJSON(url, body, { signal } = {}) {
+  if (!HAS_KEY) throw new Error("OPENAI_API_KEY is missing");
+  const resp = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ input: text, model: EMBED_MODEL })
+    body: JSON.stringify(body),
+    signal
   });
-  if (!r.ok) {
-    const msg = await r.text().catch(()=> "");
-    throw new Error(`Embeddings API error ${r.status}: ${msg}`);
-  }
-  const data = await r.json();
-  return data.data[0].embedding;
+  const text = await resp.text().catch(()=> "");
+  if (!resp.ok) throw new Error(formatOpenAIError(resp.status, text));
+  try { return JSON.parse(text); } catch { return {}; }
 }
 
-/** Retrieve topK similar chunks from index. */
-async function retrieveSimilar(query, { topK = 4, maxCharsTotal = 3000 } = {}) {
-  if (!RAG_INDEX?.records?.length) return [];
+/**
+ * Ultra-robust extractor for Responses variants.
+ * Captures from: output_text, text, content/value/message strings, delta, and type:'output_text[_delta]'.
+ */
+function extractResponseText(data) {
+  if (typeof data?.output_text === "string" && data.output_text) return data.output_text;
+  if (Array.isArray(data?.output_text) && data.output_text.length) return data.output_text.join("");
 
-  const qVec = await embedText(query);
-  const scored = RAG_INDEX.records.map(r => ({
-    ...r,
-    score: cosineSim(qVec, r.embedding)
-  })).sort((a,b) => b.score - a.score);
+  const chunks = [];
+  const push = (s) => { if (s && typeof s === "string") chunks.push(s); };
 
-  const results = [];
-  let used = 0;
-  for (const rec of scored) {
-    if (results.length >= topK) break;
-    const remaining = Math.max(0, maxCharsTotal - used);
-    if (remaining < 200) break;
-    const snippet = rec.content.slice(0, remaining);
-    results.push({
-      title: rec.title,
-      file: rec.file,
-      content: snippet,
-      score: rec.score
-    });
-    used += snippet.length;
+  const visit = (node, role = null) => {
+    if (node == null) return;
+    if (typeof node === "string") { push(node); return; }
+    if (Array.isArray(node)) { for (const n of node) visit(n, role); return; }
+    if (typeof node !== "object") return;
+
+    const nextRole = typeof node.role === "string" ? node.role : role;
+    const ty = node.type;
+
+    for (const k of ["output_text", "text", "content", "value", "message"]) {
+      if (typeof node[k] === "string") {
+        if (nextRole === "assistant" || k === "output_text" || ty === "output_text" || ty === "output_text_delta" || ty === "text" || ty === "refusal") {
+          push(node[k]);
+        }
+      }
+    }
+
+    if (node.delta) {
+      if (typeof node.delta === "string") push(node.delta);
+      else visit(node.delta, nextRole);
+    }
+
+    for (const k of ["output", "content", "message", "messages", "choices", "arguments", "items", "parts", "data"]) {
+      if (node[k]) visit(node[k], nextRole);
+    }
+  };
+
+  visit(data, null);
+
+  const out = chunks.join("").trim();
+  if (!out && DEBUG) {
+    try { console.log("ℹ️ Empty extract; raw head:", JSON.stringify(data).slice(0, 400)); } catch {}
   }
-  return results;
+  return out;
 }
 
-function buildMessages(userPrompt, tone, length, retrieved = []) {
-  const style = styleInstruction(tone, length);
-
-  const baseSystem =
-    "You are a blog writing assistant trained in Hanza Stephens' voice and style. " +
-    "Write as a calm, strategic operator: practical, structured, and insightful. " +
-    "Favor clear section headings, bullets, and concrete frameworks over fluff.";
-
-  const guide = STYLE_GUIDE
-    ? `\n\n### VOICE GUIDE (Highest priority)\n${STYLE_GUIDE}\n\nFollow this guide strictly.`
-    : "";
-
-  const formattingRules =
-    "Format with clean markdown: use H1/H2/H3 headings, bullets, numbered steps, and code fences for templates where helpful. " +
-    "Avoid emojis unless the user asks. Keep advice concrete and de-jargonized.";
-
-  let refs = "";
-  if (retrieved?.length) {
-    const blocks = retrieved.map((r, i) =>
-      `— Source ${i+1}: ${r.title}\n${r.content.trim()}`
-    ).join("\n\n");
-    refs = `\n\n### REFERENCE EXCERPTS (Use for tone & examples; do not cite verbatim)\n${blocks}`;
-  }
-
-  return [
-    { role: "system", content: `${baseSystem}${guide}\n\n${formattingRules}${refs}` },
-    { role: "system", content: `Stylistic guidance: ${style}` },
-    { role: "user",   content: userPrompt }
-  ];
+function getIncompleteReason(data) {
+  if (!data || typeof data !== "object") return null;
+  if (data.status === "incomplete") return data?.incomplete_details?.reason || "unknown";
+  return null;
 }
 
-// ====== Health + config ======
-app.get("/health", (_req, res) => res.json({ ok: true, port: PORT }));
+// Single call with string input
+async function callOnce(messages, tokens, { signal } = {}) {
+  const inputStr = messagesToPlainString(messages);
+  const body = { model: MODEL, input: inputStr, max_output_tokens: clampTokens(tokens) };
+  const data = await fetchJSON("https://api.openai.com/v1/responses", body, { signal });
+  const text = extractResponseText(data);
+  const reason = getIncompleteReason(data);
+  return { text, incompleteReason: reason, raw: data };
+}
+
+// Auto-continue on max_output_tokens
+async function completeWithAutoContinue(messages, tokens, { rounds = AUTOCONTINUE_ROUNDS } = {}) {
+  let acc = "";
+  let baseMessages = messages;
+  let lastReason = null;
+
+  for (let i = 0; i < Math.max(1, rounds); i++) {
+    const { text, incompleteReason } = await callOnce(baseMessages, tokens);
+    if (text) acc += (acc ? "\n" : "") + text;
+    lastReason = incompleteReason;
+
+    if (incompleteReason !== "max_output_tokens") break;
+
+    baseMessages = [
+      ...messages,
+      { role: "assistant", content: text || "" },
+      { role: "user", content: "Continue from where you stopped. Keep the same structure and style." }
+    ];
+    tokens = clampTokens(Math.round(tokens * 1.25)); // why: gradually increase per round
+  }
+
+  return { text: acc, incompleteReason: lastReason };
+}
+
+/* ---------------- Health + config ---------------- */
+app.get("/health", (_req, res) => res.json({
+  ok: true,
+  port: String(PORT),
+  model: MODEL,
+  key: HAS_KEY ? "present" : "missing",
+  api_mode: IS_GPT5 ? "responses" : "chat",
+  caps: {
+    RESP_MAX_TOKENS_CAP: MAX_TOKEN_CAP,
+    TOKEN_MULTIPLIER: TOKEN_MULT,
+    AUTOCONTINUE_ROUNDS
+  }
+}));
 app.get("/config", (_req, res) => res.json({
-  model: MODEL, demo: DEMO,
-  rag: Boolean(RAG_INDEX?.records?.length),
-  embed_model: EMBED_MODEL
+  model: MODEL, demo: DEMO, api_mode: IS_GPT5 ? "responses" : "chat_completions"
 }));
 
-// Optional: reload style and index without restarting
-app.post("/admin/reload-style", (_req, res) => {
+/* ---------------- Verify endpoint ---------------- */
+app.get("/api/test-gpt5", async (_req, res) => {
   try {
-    STYLE_GUIDE = fs.readFileSync(STYLE_FILE, "utf8").slice(0, 8000);
-    res.json({ ok: true, bytes: STYLE_GUIDE.length });
+    if (!HAS_KEY) return res.status(400).json({ ok:false, error:"OPENAI_API_KEY missing" });
+    if (!IS_GPT5) return res.status(400).json({ ok:false, error:`Model '${MODEL}' is not GPT-5.*` });
+
+    const data = await fetchJSON("https://api.openai.com/v1/responses", {
+      model: MODEL,
+      input: "Say: hello from gpt-5-nano",
+      max_output_tokens: 64
+    });
+
+    const output = extractResponseText(data) || "";
+    res.json({ ok:true, output, raw: data });
   } catch (e) {
-    res.status(500).json({ ok: false, error: String(e) });
-  }
-});
-app.post("/admin/reload-index", (_req, res) => {
-  try {
-    RAG_INDEX = JSON.parse(fs.readFileSync(INDEX_FILE, "utf8"));
-    res.json({ ok: true, count: RAG_INDEX.count });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e) });
+    res.status(500).json({ ok:false, error: String(e.message || e) });
   }
 });
 
-// ====== Non-stream (fallback) ======
+/* ---------------- /api/chat ---------------- */
 app.post("/api/chat", async (req, res) => {
   try {
     const { message, tone = "balanced", length = "standard" } = req.body || {};
-    if (!message) return res.status(400).json({ error: "Missing 'message'." });
+    if (!message || typeof message !== "string") return res.status(400).json({ error: "Missing 'message'." });
 
-    if (DEMO) return res.json({ reply: demoDraft(message, tone, length) });
-
-    // Skip server retrieval if client already stuffed context
-    const clientStuffed = /CONTEXT EXCERPTS:/i.test(message);
-    const retrieved = clientStuffed ? [] : await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
-
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: buildMessages(message, tone, length, retrieved),
-        temperature: 0.7,
-        max_tokens: 1500
-      })
-    });
-
-    if (!resp.ok) {
-      const txt = await resp.text().catch(() => "");
-      console.error("OpenAI error:", resp.status, txt);
-      if (resp.status === 404) return res.json({ reply: `⚠️ Model "${MODEL}" unavailable. Try OPENAI_MODEL=gpt-4o-mini.` });
-      if (resp.status === 429) return res.json({ reply: "⚠️ No remaining credit. Add billing or set DEMO_MODE=true." });
-      return res.json({ reply: "⚠️ The AI service returned an error. Please try again." });
+    if (DEMO) {
+      const title = `Quick draft: ${message.slice(0, 60)}`;
+      const demo = `# ${title}\n\n- Demo mode.\n- Set DEMO_MODE=false to use the model.`;
+      return res.json({ reply: demo });
     }
+    if (!HAS_KEY) return res.json({ reply: "⚠️ OPENAI_API_KEY missing on server." });
+    if (!IS_GPT5) return res.json({ reply: `⚠️ OPENAI_MODEL='${MODEL}' is not a GPT-5 model. Set OPENAI_MODEL=gpt-5-nano in .env.` });
 
-    const data = await resp.json();
-    const reply = data?.choices?.[0]?.message?.content?.trim() || "⚠️ No content returned.";
-    res.json({ reply });
+    const userText = extractUserRequest(message);
+    const messages = buildMessages(userText, tone, length);
+
+    const tokenBudget = applyMultiplier(tokensForLength(length));
+    const { text, incompleteReason } = await completeWithAutoContinue(messages, tokenBudget, { rounds: AUTOCONTINUE_ROUNDS });
+
+    const reply = text || "⚠️ No content returned by GPT-5.";
+    const meta = incompleteReason ? `\n\n> _Note: model stopped early (${incompleteReason}); auto-continued ${AUTOCONTINUE_ROUNDS}×._` : "";
+    res.json({ reply: reply + (text ? "" : meta) });
   } catch (err) {
-    console.error("Server error:", err);
-    res.json({ reply: "⚠️ Server error. Check logs." });
+    if (DEBUG) console.error("Server error:", err);
+    res.json({ reply: `⚠️ ${String(err.message || err)}` });
   }
 });
 
-// ====== Stream (SSE) ======
+/* ---------------- /api/stream (pseudo-stream) ---------------- */
+async function handleStream(message, tone, length, _req, res) {
+  res.writeHead(200, sseHeaders());
+  if (!message) { res.write(`data: Missing 'message'.\n\n`); res.write(`data: [DONE]\n\n`); return res.end(); }
+
+  if (DEMO) {
+    const text = `# Demo stream\n\nYou sent: ${message}`;
+    for (const ch of chunkForSSE(text, 180)) { res.write(`data: ${escapeSSE(ch)}\n\n`); await delay(8); }
+    res.write(`data: [DONE]\n\n`); return res.end();
+  }
+  if (!HAS_KEY) { res.write(`data: ⚠️ OPENAI_API_KEY missing.\n\n`); res.write(`data: [DONE]\n\n`); return res.end(); }
+  if (!IS_GPT5) { res.write(`data: ⚠️ Set OPENAI_MODEL=gpt-5-nano.\n\n`); res.write(`data: [DONE]\n\n`); return res.end(); }
+
+  const userText = extractUserRequest(message);
+  const messages = buildMessages(userText, tone, length);
+
+  try {
+    const tokenBudget = applyMultiplier(tokensForLength(length));
+    const { text, incompleteReason } = await completeWithAutoContinue(messages, tokenBudget, { rounds: AUTOCONTINUE_ROUNDS });
+    const out = text && String(text).trim();
+    if (!out) {
+      res.write(`data: ⚠️ No content returned by GPT-5.\n\n`);
+      res.write(`data: [DONE]\n\n`);
+      return res.end();
+    }
+    for (const part of chunkForSSE(out, 200)) res.write(`data: ${escapeSSE(part)}\n\n`);
+    if (incompleteReason) res.write(`data: \n\n> _Auto-continued due to ${incompleteReason}._\n\n`);
+    res.write(`data: [DONE]\n\n`);
+    res.end();
+  } catch (e) {
+    if (DEBUG) console.error("OpenAI stream error:", e);
+    res.write(`data: ⚠️ ${String(e.message || e)}\n\n`);
+    res.write(`data: [DONE]\n\n`);
+    res.end();
+  }
+}
+
 app.get("/api/stream", async (req, res) => {
   try {
     const message = String(req.query.message || "");
     const tone    = String(req.query.tone || "balanced");
     const length  = String(req.query.length || "standard");
-
-    res.writeHead(200, sseHeaders());
-    if (!message) {
-      res.write(`data: Missing 'message'.\n\n`);
-      res.write(`data: [DONE]\n\n`);
-      return res.end();
-    }
-
-    if (DEMO) return streamDemoDraft(res, message, tone, length);
-
-    const clientStuffed = /CONTEXT EXCERPTS:/i.test(message);
-    const retrieved = clientStuffed ? [] : await retrieveSimilar(message, { topK: 4, maxCharsTotal: 3000 });
-
-    // --- Abort upstream call if the client disconnects
-    const ac = new AbortController();
-    const { signal } = ac;
-    req.on("close", () => {
-      try { ac.abort(); } catch {}
-      try {
-        res.write(`data: [DONE]\n\n`);
-        res.end();
-      } catch {}
-    });
-
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: buildMessages(message, tone, length, retrieved),
-        temperature: 0.7,
-        max_tokens: 1700,
-        stream: true
-      }),
-      signal
-    });
-
-    if (!resp.ok || !resp.body) {
-      const txt = await resp.text().catch(() => "");
-      console.error("OpenAI stream error:", resp.status, txt);
-      if (resp.status === 404) res.write(`data: ⚠️ Model "${MODEL}" unavailable.\n\n`);
-      else if (resp.status === 429) res.write(`data: ⚠️ No project credit. Add billing or enable DEMO_MODE.\n\n`);
-      else res.write(`data: ⚠️ Failed to start stream.\n\n`);
-      res.write(`data: [DONE]\n\n`);
-      return res.end();
-    }
-
-    const reader  = resp.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let leftover  = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = (leftover + chunk).split(/\r?\n/);
-      leftover = lines.pop() || "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data:")) continue;
-        const data = line.slice(5).trim();
-        if (data === "[DONE]") {
-          res.write(`data: [DONE]\n\n`);
-          res.end();
-          return;
-        }
-        try {
-          const json = JSON.parse(data);
-          const token = json.choices?.[0]?.delta?.content || "";
-          // simple, robust token write
-          if (token) res.write(`data: ${escapeSSE(token)}\n\n`);
-        } catch {
-          // ignore keep-alives / non-JSON lines
-        }
-      }
-    }
-
-    res.write(`data: [DONE]\n\n`);
-    res.end();
+    await handleStream(message, tone, length, req, res);
   } catch (err) {
-    console.error("Stream server error:", err);
-    try {
-      res.write(`data: ⚠️ Server error while streaming.\n\n`);
-      res.write(`data: [DONE]\n\n`);
-      res.end();
-    } catch {}
+    if (DEBUG) console.error("Stream server error (GET):", err);
+    try { res.write(`data: ⚠️ Server error while streaming.\n\ndata: [DONE]\n\n`); res.end(); } catch {}
+  }
+});
+app.post("/api/stream", async (req, res) => {
+  try {
+    const { message = "", tone = "balanced", length = "standard" } = req.body || {};
+    await handleStream(String(message), String(tone), String(length), req, res);
+  } catch (err) {
+    if (DEBUG) console.error("Stream server error (POST):", err);
+    try { res.writeHead(200, sseHeaders()); res.write(`data: ⚠️ Server error while streaming.\n\ndata: [DONE]\n\n`); res.end(); } catch {}
   }
 });
 
-// ====== Save transcript (PDF or MD) + JSON for Jump Back In ======
+/* ---------------- Save/list/delete transcripts ---------------- */
 app.post("/api/save", async (req, res) => {
   try {
     const { transcript = [], format = "pdf", title = "hanza_session" } = req.body || {};
     if (!Array.isArray(transcript) || !transcript.length) return res.json({ ok:false, error:"empty transcript" });
+    if (transcript.length > 2000) return res.status(413).json({ ok:false, error:"transcript too large" });
 
     const safe = s => (s || "").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_").slice(0, 60);
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const base  = `${safe(title) || "hanza_session"}__${stamp}`;
 
-    // Always write JSON (for Jump Back In)
     const jsonName = `${base}.json`;
-    const jsonPath = path.join(TRANSCRIPTS, jsonName);
-    const jsonDoc = {
-      title,
-      savedAt: new Date().toISOString(),
-      transcript // [{role, text}]
-    };
+    const jsonPath = safePathJoin(TRANSCRIPTS, jsonName);
+    const jsonDoc = { title, savedAt: new Date().toISOString(), transcript };
     fs.writeFileSync(jsonPath, JSON.stringify(jsonDoc, null, 2), "utf8");
 
     if (format === "md") {
       const mdName = `${base}.md`;
-      const mdPath = path.join(TRANSCRIPTS, mdName);
+      const mdPath = safePathJoin(TRANSCRIPTS, mdName);
       const md = transcript.map(t => `${t.role === "user" ? "You" : "Hanza"}:\n${t.text}\n`).join("\n---\n\n");
       fs.writeFileSync(mdPath, md, "utf8");
-      return res.json({
-        ok:true,
-        file: mdName,
-        url: `/transcripts/${encodeURIComponent(mdName)}`,
-        json: `/transcripts/${encodeURIComponent(jsonName)}`
-      });
+      return res.json({ ok:true, file: mdName, url: `/transcripts/${encodeURIComponent(mdName)}`, json: `/transcripts/${encodeURIComponent(jsonName)}` });
     }
 
-    // PDF
     const pdfName = `${base}.pdf`;
-    const pdfPath = path.join(TRANSCRIPTS, pdfName);
+    const pdfPath = safePathJoin(TRANSCRIPTS, pdfName);
     const doc = new PDFDocument({ margin: 50 });
     const stream = fs.createWriteStream(pdfPath);
     doc.pipe(stream);
@@ -417,28 +419,19 @@ app.post("/api/save", async (req, res) => {
     doc.fontSize(18).text(title, { underline: false });
     doc.moveDown(0.5);
     transcript.forEach(({ role, text }) => {
-      doc.fontSize(12).fillColor("#555").text(role === "user" ? "You" : "Hanza", { continued:false });
+      doc.fontSize(12).fillColor("#555").text(role === "user" ? "You" : "Hanza");
       doc.moveDown(0.1);
-      doc.fontSize(12).fillColor("#000").text(text);
+      doc.fontSize(12).fillColor("#000").text(String(text || ""), { paragraphGap: 8 });
       doc.moveDown(0.6);
     });
 
     doc.end();
-    stream.on("finish", () => {
-      res.json({
-        ok:true,
-        file: pdfName,
-        url: `/transcripts/${encodeURIComponent(pdfName)}`,
-        json: `/transcripts/${encodeURIComponent(jsonName)}`
-      });
-    });
+    stream.on("finish", () => res.json({ ok:true, file: pdfName, url: `/transcripts/${encodeURIComponent(pdfName)}`, json: `/transcripts/${encodeURIComponent(jsonName)}` }));
     stream.on("error", (e) => res.status(500).json({ ok:false, error: String(e) }));
   } catch (e) {
     res.status(500).json({ ok:false, error: String(e) });
   }
 });
-
-// ====== List transcripts (include jsonUrl) ======
 app.get("/api/transcripts", async (_req, res) => {
   try {
     const files = fs.readdirSync(TRANSCRIPTS).filter(f => f.endsWith(".pdf") || f.endsWith(".md"));
@@ -447,63 +440,31 @@ app.get("/api/transcripts", async (_req, res) => {
       const baseNoExt = f.replace(/\.(pdf|md)$/i, "");
       const jsonName = `${baseNoExt}.json`;
       const jsonExists = fs.existsSync(path.join(TRANSCRIPTS, jsonName));
-      return {
-        name: f,
-        size: st.size,
-        mtime: st.mtime,
-        url: `/transcripts/${encodeURIComponent(f)}`,
-        jsonUrl: jsonExists ? `/transcripts/${encodeURIComponent(jsonName)}` : null
-      };
+      return { name: f, size: st.size, mtime: st.mtime, url: `/transcripts/${encodeURIComponent(f)}`, jsonUrl: jsonExists ? `/transcripts/${encodeURIComponent(jsonName)}` : null };
     }).sort((a,b)=> b.mtime - a.mtime);
     res.json({ ok:true, files: list });
   } catch (e) {
     res.status(500).json({ ok:false, error: String(e) });
   }
 });
-
-// ====== Delete transcript (also remove matching JSON) ======
 app.delete("/api/transcripts/:file", (req, res) => {
   try {
-    const file = req.params.file;
-    const target = path.join(TRANSCRIPTS, file);
+    const raw = req.params.file;
+    const file = safeBasename(raw);
+    const target = safePathJoin(TRANSCRIPTS, file);
     if (!fs.existsSync(target)) return res.status(404).json({ ok:false, error:"Not found" });
     fs.unlinkSync(target);
-
-    // Remove matching JSON if it exists
     const baseNoExt = file.replace(/\.(pdf|md)$/i, "");
-    const jsonPath = path.join(TRANSCRIPTS, `${baseNoExt}.json`);
+    const jsonPath = safePathJoin(TRANSCRIPTS, `${baseNoExt}.json`);
     if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath);
-
     res.json({ ok:true });
   } catch (e) {
     res.status(500).json({ ok:false, error: String(e) });
   }
 });
 
-// ---- BEGIN: sources endpoint (clean) ----
-app.get('/api/sources', async (_req, res) => {
-  try {
-    const files = (await fs.promises.readdir(SRC_DIR))
-      .filter(f => /\.(txt|md)$/i.test(f))
-      .sort();
-
-    const items = await Promise.all(
-      files.map(async (name) => {
-        const text = await fs.promises.readFile(path.join(SRC_DIR, name), 'utf8');
-        return { name, text };
-      })
-    );
-
-    res.json({ ok: true, items });
-  } catch (err) {
-    console.error('sources error:', err);
-    res.json({ ok: false, items: [] });
-  }
-});
-// ---- END: sources endpoint ----
-
-// ====== start ======
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
-  console.log("Using model:", MODEL, "| DEMO_MODE:", DEMO, "| RAG:", Boolean(RAG_INDEX?.records?.length));
+  console.log("Using model:", MODEL, "| DEMO_MODE:", DEMO, "| api_mode:", IS_GPT5 ? "responses" : "chat");
+  if (!HAS_KEY) console.log("⚠️ OPENAI_API_KEY is missing.");
 });
