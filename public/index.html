@@ -102,6 +102,7 @@
     .message.bot .message-content{
       background:var(--botPink); border-color:var(--botPinkBorder); color:#000; padding-right:56px;
     }
+    .message.bot .message-content { white-space: pre-wrap; }
     .message.bot .message-content h1{ font-size:24px; font-weight:800; line-height:1.25; margin:0 0 10px; }
     .message.bot .message-content h2{ font-size:18px; font-weight:700; line-height:1.3; margin:16px 0 8px; }
     .message.bot .message-content h3{ font-size:16px; font-weight:700; line-height:1.35; margin:16px 0 6px; }
@@ -313,109 +314,33 @@
     });
 
     // --- client-side spacing fixer to smooth stream joins (mirrors server) ---
-    function normalizeTextSpacingClient(s=''){
-      if (!s) return s;
-      s = s.replace(/\r\n?/g, "\n");
-      s = s.replace(/([A-Za-z0-9])\.([A-Za-z])/g, "$1. $2");
-      s = s.replace(/([,;:!?])(?=[A-Za-z0-9(])/g, "$1 ");
-      s = s.replace(/\s+([.,;:!?])/g, "$1");
-      s = s.replace(/\be\. ?g\./gi, "e.g.");
-      s = s.replace(/\bi\. ?e\./gi, "i.e.");
-      s = s.replace(/\b([A-Z])\. ?([A-Z])\./g, "$1.$2.");
-      s = s.replace(/[ \t]{2,}/g, " ").replace(/\. \./g, ". ");
-      return s;
+    function normalizeMarkdown(md = "") {
+      // Keep it simple: do NOT rewrite bullets, numbers, or split headings.
+      return String(md || "")
+        .replace(/\r\n?/g, "\n")
+        .replace(/^(#{1,6})([^\s#])/gm, "$1 $2"); // ensure space after leading hashes
     }
 
-    // Persistence
-    const CHAT_KEY = 'hanza_chat_v5';
-    const SETTINGS_KEY = 'hanza_settings_v1';
-    const TITLE_KEY = 'hanza_title_v1';
-    const safeSet = (k,v)=>{ try{ localStorage.setItem(k,v); }catch{} };
-    const safeGet = (k)=>{ try{ return localStorage.getItem(k); }catch{ return null; } };
-
-    const saved = safeGet(CHAT_KEY);
-    if (saved) chatMessages.innerHTML = saved;
-
-    const savedSettings = JSON.parse(safeGet(SETTINGS_KEY) || '{}');
-    toneSel.value   = savedSettings.tone   || 'balanced';
-    lengthSel.value = savedSettings.length || 'concise';
-
-    const savedTitle = safeGet(TITLE_KEY) || 'Untitled Session';
-    setSessionTitle(savedTitle);
-
-    let saveTimer = null;
-    function saveChatDebounced(){ clearTimeout(saveTimer); saveTimer = setTimeout(()=> safeSet(CHAT_KEY, chatMessages.innerHTML), 600); }
-    function saveSettings(){ safeSet(SETTINGS_KEY, JSON.stringify({ tone: toneSel.value, length: lengthSel.value })); }
-    toneSel.addEventListener('change', saveSettings);
-    lengthSel.addEventListener('change', saveSettings);
-
-    function showToast(msg, ms=1400){ toast.textContent = msg; toast.classList.add('show'); setTimeout(()=> toast.classList.remove('show'), ms); }
-
-    messageInput.addEventListener('input', () => {
-      messageInput.style.height = 'auto';
-      messageInput.style.height = Math.min(messageInput.scrollHeight, 160) + 'px';
-      maybeShowSlashMenu();
-    });
-
-    /* ---------- Markdown: normalize -> marked -> sanitize ---------- */
-    function normalizeMarkdown(md = '') {
-      let s = (md || '').replace(/\r\n?/g, '\n');
-      s = s.replace(/([^\n])(\#{1,6})(?=\s)/g, '$1\n$2');
-      s = s.replace(/^(\#{1,6})([^\s#])/gm, '$1 $2');
-      s = s.replace(/^(#{1,6}\s+)([^\n]+)$/gm, (_m, hashes, raw) => {
-        let t = raw.trim();
-        t = t.replace(/([a-z])([A-Z])/g, '$1 $2');
-        let cut = t.search(/[.!?](\s|$)/);
-        if (cut === -1 && t.includes(',')) cut = t.indexOf(',');
-        if (cut === -1 && (t.length > 70 || t.split(/\s+/).length > 12)) {
-          const words = t.split(/\s+/);
-          const head = words.slice(0, 10).join(' ');
-          const rest = words.slice(10).join(' ').trim();
-          return rest ? `${hashes}${head}\n${rest}` : `${hashes}${head}`;
-        }
-        if (cut > 0) {
-          const head = t.slice(0, cut).trim();
-          const rest = t.slice(cut).replace(/^[,.\s]+/, '').trim();
-          return rest ? `${hashes}${head}\n${rest}` : `${hashes}${head}`;
-        }
-        return `${hashes}${t}`;
-      });
-      s = s.replace(/^(#{1,6}\s+[^\n]+)\n(?!\n|#{1,6}|\-|>|\*|\d+\.)/gm, '$1\n\n');
-      s = s.replace(/^\s*(\d+)\)\s+/gm, '$1. ');
-      s = s.replace(/([.:;])\s*[-•]\s+/g, '$1\n- ');
-      s = s.replace(/:\s*-\s+/g, ':\n- ');
-      s = s.replace(/^(#{1,6}\s+[^\n]*?)\s*[-•]\s+/gm, '$1\n- ');
-      s = s.replace(/\n\s*[-•]\s+/g, '\n- ');
-      s = s.replace(/\n(\d{1,2})\s*\n(?=[A-Z0-9])/g, (_m, n) => `\n${n}. `);
-      s = s.replace(/(^|\n)(\s{0,3}#{1,6}\s+[^\n]*)$/, '$1$2\n');
-      return s;
-    }
-    function renderMarkdown(mdText = '') {
+    function renderMarkdown(mdText = "") {
       const normalized = normalizeMarkdown(mdText);
+
       if (!renderMarkdown._configured) {
-        marked.setOptions({ gfm: true, breaks: false, headerIds: false, mangle: false });
+        marked.setOptions({
+          gfm: true,
+          breaks: false,
+          headerIds: false,
+          mangle: false
+        });
         renderMarkdown._configured = true;
       }
+
       let html = marked.parse(normalized);
       html = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
-      const host = document.createElement('div');
-      host.innerHTML = html;
-      host.querySelectorAll('h1, h2, h3').forEach(h => {
-        const t = (h.textContent || '').trim();
-        if (t.length <= 80 || /[.!?]/.test(t)) return;
-        const words = t.split(/\s+/);
-        if (words.length < 12) return;
-        const head = words.slice(0, 10).join(' ');
-        const rest = words.slice(10).join(' ').trim();
-        if (!rest) return;
-        h.textContent = head;
-        const p = document.createElement('p');
-        p.textContent = rest;
-        h.insertAdjacentElement('afterend', p);
-      });
-      host.innerHTML = host.innerHTML.replace(/<strong>([^<]{140,})<\/strong>/g, '$1');
-      return host.innerHTML.trim();
+
+      // No extra DOM surgery; just return what the model wrote.
+      return (html || "").trim();
     }
+
     function decorateCodeCopies(container){
       container.querySelectorAll('pre').forEach(pre=>{
         if (pre.querySelector('.code-copy')) return;

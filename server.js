@@ -328,6 +328,108 @@ app.get("/api/test-gpt5", async (_req, res) => {
   }
 });
 
+/* ---------------- /api/raw: dump raw Responses JSON for debugging ---------------- */
+app.post("/api/raw", async (req, res) => {
+  try {
+    const {
+      message = "",
+      tone = "balanced",
+      length = "standard",
+      rounds = 1,
+      max_output_tokens
+    } = req.body || {};
+    if (!message) return res.status(400).json({ ok:false, error:"Missing 'message'." });
+
+    if (DEMO) {
+      return res.json({
+        ok: true,
+        note: "DEMO_MODE=true: not calling OpenAI",
+        sampleRequest: { model: MODEL, message, tone, length, rounds, max_output_tokens }
+      });
+    }
+    if (!HAS_KEY) return res.status(400).json({ ok:false, error:"OPENAI_API_KEY missing" });
+    if (!IS_GPT5) return res.status(400).json({ ok:false, error:`OPENAI_MODEL='${MODEL}' is not a GPT-5 model` });
+
+    const userText = extractUserRequest(message);
+    const baseMsgs = buildMessages(userText, tone, length);
+
+    let tokens = clampTokens(max_output_tokens ?? applyMultiplier(tokensForLength(length)));
+    const responses = [];
+    let accText = "";
+    let incompleteReason = null;
+
+    let msgs = baseMsgs;
+    const ROUNDS = Math.min(20, Math.max(1, Number(rounds || 1)));
+
+    for (let i = 0; i < ROUNDS; i++) {
+      const body = { model: MODEL, input: messagesToPlainString(msgs), max_output_tokens: tokens };
+      const data = await fetchJSON("https://api.openai.com/v1/responses", body);
+      responses.push(data);
+
+      const piece = extractResponseText(data) || "";
+      if (piece) accText += (accText ? "\n" : "") + piece;
+
+      incompleteReason = getIncompleteReason(data);
+      if (incompleteReason !== "max_output_tokens") break;
+
+      // prepare next round (auto-continue style)
+      msgs = [
+        ...baseMsgs,
+        { role: "assistant", content: piece },
+        { role: "user", content: "Continue from where you stopped. Keep the same structure and style." }
+      ];
+      tokens = clampTokens(Math.round(tokens * 1.25));
+    }
+
+    res.json({
+      ok: true,
+      model: MODEL,
+      roundsUsed: responses.length,
+      tokenBudgetStart: clampTokens(max_output_tokens ?? applyMultiplier(tokensForLength(length))),
+      tokenBudgetFinal: tokens,
+      incompleteReason: incompleteReason || null,
+      sample_text: accText.slice(0, 2000),
+      responses
+    });
+  } catch (e) {
+    if (DEBUG) console.error("api/raw error:", e);
+    res.status(500).json({ ok:false, error: String(e.message || e) });
+  }
+});
+
+/* GET convenience (single-round) --------------------------------------------- */
+app.get("/api/raw", async (req, res) => {
+  try {
+    const message = String(req.query.message || "");
+    const tone    = String(req.query.tone || "balanced");
+    const length  = String(req.query.length || "standard");
+    if (!message) return res.status(400).json({ ok:false, error:"Missing 'message'." });
+
+    if (DEMO) {
+      return res.json({ ok:true, note:"DEMO_MODE=true", sampleRequest:{ model: MODEL, message, tone, length } });
+    }
+    if (!HAS_KEY) return res.status(400).json({ ok:false, error:"OPENAI_API_KEY missing" });
+    if (!IS_GPT5) return res.status(400).json({ ok:false, error:`OPENAI_MODEL='${MODEL}' is not a GPT-5 model` });
+
+    const data = await fetchJSON("https://api.openai.com/v1/responses", {
+      model: MODEL,
+      input: messagesToPlainString(buildMessages(extractUserRequest(message), tone, length)),
+      max_output_tokens: clampTokens(applyMultiplier(tokensForLength(length)))
+    });
+
+    res.json({
+      ok: true,
+      sample_text: extractResponseText(data),
+      incompleteReason: getIncompleteReason(data),
+      response: data
+    });
+  } catch (e) {
+    if (DEBUG) console.error("api/raw GET error:", e);
+    res.status(500).json({ ok:false, error: String(e.message || e) });
+  }
+});
+
+
 /* ---------------- /api/chat ---------------- */
 app.post("/api/chat", async (req, res) => {
   try {
