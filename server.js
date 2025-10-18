@@ -1,6 +1,6 @@
 // server.js
-// GPT-5-nano via /v1/responses (string input), robust extraction, auto-continue,
-// env-tunable token cap + multiplier to approximate "x10 max tokens".
+// GPT-5-nano via /v1/responses (string input), robust extraction, smart join + punctuation
+// normalization to prevent smashed words, auto-continue, and env-tunable token caps.
 
 import express from "express";
 import dotenv from "dotenv";
@@ -110,9 +110,9 @@ function extractUserRequest(raw = "") {
 }
 
 /* ---------------- Token budgets (x10-ready) ---------------- */
-// why: allow x10 via env while still clamping to a hard cap
-const MAX_TOKEN_CAP = Math.max(128, Number(process.env.RESP_MAX_TOKENS_CAP || 3500));        // set e.g. 35000
-const TOKEN_MULT    = Math.min(10, Math.max(1, Number(process.env.TOKEN_MULTIPLIER || 1)));  // set 10 for ×10
+// Env knobs to “x10” total output via multi-calls
+const MAX_TOKEN_CAP = Math.max(128, Number(process.env.RESP_MAX_TOKENS_CAP || 3500));        // e.g. 35000
+const TOKEN_MULT    = Math.min(10, Math.max(1, Number(process.env.TOKEN_MULTIPLIER || 1)));  // e.g. 10
 const AUTOCONTINUE_ROUNDS = Math.min(20, Math.max(1, Number(process.env.AUTOCONTINUE_ROUNDS || 6)));
 
 function tokensForLength(length = "standard") {
@@ -176,13 +176,48 @@ async function fetchJSON(url, body, { signal } = {}) {
   try { return JSON.parse(text); } catch { return {}; }
 }
 
+/* ---- Smart text assembly & normalization ---- */
+function smartJoin(parts = []) {
+  let out = "";
+  for (const raw of parts) {
+    const s = String(raw ?? "");
+    if (!s) continue;
+    if (!out) { out = s; continue; }
+
+    const prev = out[out.length - 1];
+    const next = s[0];
+
+    const needSpace =
+      (/\w/.test(prev) && /\w/.test(next)) ||                 // word→word
+      (/[)\]]/.test(prev) && /\w/.test(next)) ||              // )]→word
+      (/[.,;:!?]/.test(prev) && !/[\s.,;:!?)\]]/.test(next)); // punctuation→letter
+
+    out += (needSpace ? " " : "") + s;
+  }
+  // No space before punctuation
+  return out.replace(/\s+([.,;:!?])/g, "$1");
+}
+function normalizeOutputText(s = "") {
+  if (!s) return s;
+  // Ensure space after punctuation when followed by letter/number/(
+  s = s.replace(/([.,;:!?])(?=[A-Za-z0-9(])/g, "$1 ");
+  // Space after closing bracket before alnum
+  s = s.replace(/([)\]])(?=[A-Za-z0-9])/g, "$1 ");
+  // Collapse spaces
+  s = s.replace(/[ \t]{2,}/g, " ");
+  // Clean double periods like ". ." → ". "
+  s = s.replace(/\. \./g, ". ");
+  return s;
+}
+
 /**
  * Ultra-robust extractor for Responses variants.
- * Captures from: output_text, text, content/value/message strings, delta, and type:'output_text[_delta]'.
+ * Captures from: output_text, text/content/value/message strings, delta, type:'output_text[_delta]'.
+ * Uses smartJoin + normalizeOutputText to preserve spacing between tiny chunks.
  */
 function extractResponseText(data) {
-  if (typeof data?.output_text === "string" && data.output_text) return data.output_text;
-  if (Array.isArray(data?.output_text) && data.output_text.length) return data.output_text.join("");
+  if (typeof data?.output_text === "string" && data.output_text) return normalizeOutputText(data.output_text);
+  if (Array.isArray(data?.output_text) && data.output_text.length) return normalizeOutputText(data.output_text.join(""));
 
   const chunks = [];
   const push = (s) => { if (s && typeof s === "string") chunks.push(s); };
@@ -216,7 +251,7 @@ function extractResponseText(data) {
 
   visit(data, null);
 
-  const out = chunks.join("").trim();
+  const out = normalizeOutputText(smartJoin(chunks)).trim();
   if (!out && DEBUG) {
     try { console.log("ℹ️ Empty extract; raw head:", JSON.stringify(data).slice(0, 400)); } catch {}
   }
@@ -257,7 +292,7 @@ async function completeWithAutoContinue(messages, tokens, { rounds = AUTOCONTINU
       { role: "assistant", content: text || "" },
       { role: "user", content: "Continue from where you stopped. Keep the same structure and style." }
     ];
-    tokens = clampTokens(Math.round(tokens * 1.25)); // why: gradually increase per round
+    tokens = clampTokens(Math.round(tokens * 1.25)); // small bump each round
   }
 
   return { text: acc, incompleteReason: lastReason };
