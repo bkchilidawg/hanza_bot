@@ -1,4 +1,4 @@
-<!-- /public/index.html — minimal client; sends raw user text; no style guide / sources -->
+<!-- /public/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -312,6 +312,20 @@
       avatar.replaceWith(badge);
     });
 
+    // --- client-side spacing fixer to smooth stream joins (mirrors server) ---
+    function normalizeTextSpacingClient(s=''){
+      if (!s) return s;
+      s = s.replace(/\r\n?/g, "\n");
+      s = s.replace(/([A-Za-z0-9])\.([A-Za-z])/g, "$1. $2");
+      s = s.replace(/([,;:!?])(?=[A-Za-z0-9(])/g, "$1 ");
+      s = s.replace(/\s+([.,;:!?])/g, "$1");
+      s = s.replace(/\be\. ?g\./gi, "e.g.");
+      s = s.replace(/\bi\. ?e\./gi, "i.e.");
+      s = s.replace(/\b([A-Z])\. ?([A-Z])\./g, "$1.$2.");
+      s = s.replace(/[ \t]{2,}/g, " ").replace(/\. \./g, ". ");
+      return s;
+    }
+
     // Persistence
     const CHAT_KEY = 'hanza_chat_v5';
     const SETTINGS_KEY = 'hanza_settings_v1';
@@ -473,14 +487,15 @@
       return bubble;
     }
 
-    // STREAM: POST ReadableStream with SSE fallback (server pseudo-streams for GPT-5)
+    // STREAM: POST ReadableStream with SSE fallback
     let currentES = null;
     let controllerAbort = null;
     let lastUserPrompt = '';
 
     async function streamBotResponse(userMessage, opts, targetBubble){
       const write = (buf) => {
-        targetBubble.innerHTML = renderMarkdown(buf);
+        const fixed = normalizeTextSpacingClient(buf); // <<— important
+        targetBubble.innerHTML = renderMarkdown(fixed);
         decorateCodeCopies(targetBubble);
         if (autoScroll) chatMessages.scrollTop = chatMessages.scrollHeight;
         saveChatDebounced();
@@ -633,7 +648,7 @@
     });
     sessionTitle.addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ e.preventDefault(); sessionTitle.blur(); } });
 
-    // Slash menu presets (just convenience)
+    // Slash menu presets
     const presets = {
       '/outline': 'Create a blog post outline with H1/H2, bullet points, and a crisp CTA at the end.',
       '/seo': 'Draft an SEO brief: target keywords, intent, title ideas, meta description, H2s, and internal links.',
@@ -696,7 +711,7 @@
     sendButton.addEventListener('click', handleSend);
     messageInput.addEventListener('keypress', (e)=>{ if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); } });
 
-    // ------- History drawer (unchanged) -------
+    // ------- History drawer -------
     async function loadHistory(){
       historyList.innerHTML = '<div class="meta" style="padding:12px;">Loading…</div>';
       try{
@@ -836,7 +851,7 @@
       saveChatDebounced(); messageInput.focus();
     });
 
-    // Slash presets
+    // (spare) presets map
     const presetsMap = {
       '/outline': 'Create a blog post outline with H1/H2, bullet points, and a crisp CTA at the end.',
       '/cta': 'Propose 5 call-to-action options that feel natural and value-led.'

@@ -1,6 +1,6 @@
 // server.js
-// GPT-5-nano via /v1/responses (string input), robust extraction, smart join + punctuation
-// normalization to prevent smashed words, auto-continue, and env-tunable token caps.
+// GPT-5-nano via /v1/responses (string input), robust extraction, smart join +
+// punctuation normalization, auto-continue, and env-tunable token caps.
 
 import express from "express";
 import dotenv from "dotenv";
@@ -110,9 +110,8 @@ function extractUserRequest(raw = "") {
 }
 
 /* ---------------- Token budgets (x10-ready) ---------------- */
-// Env knobs to “x10” total output via multi-calls
-const MAX_TOKEN_CAP = Math.max(128, Number(process.env.RESP_MAX_TOKENS_CAP || 3500));        // e.g. 35000
-const TOKEN_MULT    = Math.min(10, Math.max(1, Number(process.env.TOKEN_MULTIPLIER || 1)));  // e.g. 10
+const MAX_TOKEN_CAP = Math.max(128, Number(process.env.RESP_MAX_TOKENS_CAP || 3500));
+const TOKEN_MULT    = Math.min(10, Math.max(1, Number(process.env.TOKEN_MULTIPLIER || 1)));
 const AUTOCONTINUE_ROUNDS = Math.min(20, Math.max(1, Number(process.env.AUTOCONTINUE_ROUNDS || 6)));
 
 function tokensForLength(length = "standard") {
@@ -188,33 +187,28 @@ function smartJoin(parts = []) {
     const next = s[0];
 
     const needSpace =
-      (/\w/.test(prev) && /\w/.test(next)) ||                 // word→word
-      (/[)\]]/.test(prev) && /\w/.test(next)) ||              // )]→word
-      (/[.,;:!?]/.test(prev) && !/[\s.,;:!?)\]]/.test(next)); // punctuation→letter
+      (/\w/.test(prev) && /\w/.test(next)) ||
+      (/[)\]]/.test(prev) && /\w/.test(next)) ||
+      (/[.,;:!?]/.test(prev) && !/[\s.,;:!?)\]]/.test(next));
 
     out += (needSpace ? " " : "") + s;
   }
-  // No space before punctuation
   return out.replace(/\s+([.,;:!?])/g, "$1");
 }
 function normalizeOutputText(s = "") {
   if (!s) return s;
-  // Ensure space after punctuation when followed by letter/number/(
-  s = s.replace(/([.,;:!?])(?=[A-Za-z0-9(])/g, "$1 ");
-  // Space after closing bracket before alnum
-  s = s.replace(/([)\]])(?=[A-Za-z0-9])/g, "$1 ");
-  // Collapse spaces
-  s = s.replace(/[ \t]{2,}/g, " ");
-  // Clean double periods like ". ." → ". "
-  s = s.replace(/\. \./g, ". ");
+  s = s.replace(/\r\n?/g, "\n");
+  s = s.replace(/([A-Za-z0-9])\.([A-Za-z])/g, "$1. $2");
+  s = s.replace(/([,;:!?])(?=[A-Za-z0-9(])/g, "$1 ");
+  s = s.replace(/\s+([.,;:!?])/g, "$1");
+  s = s.replace(/\be\. ?g\./gi, "e.g.");
+  s = s.replace(/\bi\. ?e\./gi, "i.e.");
+  s = s.replace(/\b([A-Z])\. ?([A-Z])\./g, "$1.$2.");
+  s = s.replace(/[ \t]{2,}/g, " ").replace(/\. \./g, ". ");
   return s;
 }
 
-/**
- * Ultra-robust extractor for Responses variants.
- * Captures from: output_text, text/content/value/message strings, delta, type:'output_text[_delta]'.
- * Uses smartJoin + normalizeOutputText to preserve spacing between tiny chunks.
- */
+/* Robust extractor for Responses variants */
 function extractResponseText(data) {
   if (typeof data?.output_text === "string" && data.output_text) return normalizeOutputText(data.output_text);
   if (Array.isArray(data?.output_text) && data.output_text.length) return normalizeOutputText(data.output_text.join(""));
@@ -292,7 +286,7 @@ async function completeWithAutoContinue(messages, tokens, { rounds = AUTOCONTINU
       { role: "assistant", content: text || "" },
       { role: "user", content: "Continue from where you stopped. Keep the same structure and style." }
     ];
-    tokens = clampTokens(Math.round(tokens * 1.25)); // small bump each round
+    tokens = clampTokens(Math.round(tokens * 1.25));
   }
 
   return { text: acc, incompleteReason: lastReason };
